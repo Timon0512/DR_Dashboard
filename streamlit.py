@@ -4,7 +4,7 @@ from datetime import time
 import pandas as pd
 import numpy as np
 
-st.title("My DR Lens Dashboard")
+st.title("DR Statistic Dashboard")
 st.subheader(f"Today is: {datetime.date.today()}")
 #st.write("This is :green[test]")
 st.divider()
