@@ -3,8 +3,6 @@ import datetime
 from datetime import time
 import pandas as pd
 import numpy as np
-import plotly.express as px
-from plotly.subplots import make_subplots
 
 st.title("My DR Lens Dashboard")
 st.subheader(f"Today is: {datetime.date.today()}")
