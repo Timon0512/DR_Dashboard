@@ -3,6 +3,7 @@ import datetime
 from datetime import time
 import pandas as pd
 import numpy as np
+import plotly.express as px
 
 
 st.set_page_config(page_title="Distribution Overview", layout="wide")
@@ -93,16 +94,21 @@ with col3:
     expansion = st.button("See Distribution", key="expansion")
 
 with col4:
-    retracement_time = int(df_daily['max_retracement_time_seconds'].median())
+    retracement_time = int(df_daily['max_retracement_time_seconds'].mean())
     st.metric("Median Retracement before HoS/LoS", value=df_daily.retracement_level.median(),
-              delta=f"Median time of max retracement: {retracement_time // 3600}:{str(retracement_time % 3600 // 60).zfill(2)}",
+              delta=f"Mean time of max retracement: {retracement_time // 3600}:{str(retracement_time % 3600 // 60).zfill(2)}",
               delta_color="inverse")
 
     retracement = st.button("See Distribution", key="retracement")
 
 with col5:
-    st.write("Placeholder")
+    #st.write("Distribution of max retracement time")
+    retracement_time_median = int(df_daily['max_retracement_time_seconds'].median())
+    st.metric("Distribution of max tetracement time before HoS/LoS", value="-",
+                delta = f"Median time of max retracement: {retracement_time_median // 3600}:{str(retracement_time_median % 3600 // 60).zfill(2)}",
+                delta_color = "inverse")
     retracement_time = st.button("See distribution", key="retracement_time")
+    st.write("    ")
 st.divider()
 
 
@@ -151,4 +157,3 @@ st.divider()
 ### How high is the chance that price closes above DR when reaching a specific Retracemnt level?
 ## How high is the chance that price breakes DR Rule?
 
-st.write(st.session_state)
