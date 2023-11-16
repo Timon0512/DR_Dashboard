@@ -105,7 +105,8 @@ with col8:
 
 
 # #st.dataframe(df_daily)
-st.write(f"{df_daily_len} data entries selected")
+st.write(f"{df_daily_len} data points selected")
+st.write(f"Latest available date: {max(df_daily.index)}")
 st.divider()
 #
 # # Create Breakout time distribution table
@@ -142,19 +143,19 @@ else:
     st.bar_chart(df, y="Breakout Distribution")
 
 
-st.bar_chart(df, y="retracement_into_dr")
+# st.bar_chart(df, y="retracement_into_dr")
 
 st.divider()
 ####################################################
 
 
 
-st.divider()
+# st.divider()
 ####################################################
 
-st.subheader("Distribution of retracement time before high/low of the day")
-
-retracement_df = df_daily.groupby("first_breakout_time").retracement_into_dr.mean()
-st.dataframe(df)
-
-st.bar_chart(df, y="retracement_into_dr")
+# st.subheader("Distribution of retracement time before high/low of the day")
+#
+# retracement_df = df_daily.groupby("first_breakout_time").retracement_into_dr.mean()
+# st.dataframe(df)
+#
+# st.bar_chart(df, y="retracement_into_dr")
