@@ -3,6 +3,9 @@ import datetime
 import os
 import pandas as pd
 import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 st.set_page_config(page_title="Defined Range Trading Dashboard", layout="wide")
 
@@ -177,6 +180,7 @@ with tab2:
         plot_df = df.groupby(groupby_column).agg({"breakout_window": "count"})
         plot_df = plot_df.rename(columns={"breakout_window": "count"})
         plot_df["pct"] = plot_df["count"] / plot_df["count"].sum()
+        plot_df["prob"] = plot_df["pct"].cumsum()
 
         return plot_df
 
@@ -205,10 +209,44 @@ with tab2:
         st.bar_chart(create_plot_df("breakout_window"), y="pct")
     elif retracement:
         st.subheader("Distribution of max retracement")
-        st.bar_chart(create_plot_df("retracement_level"), y="pct")
+        #st.bar_chart(create_plot_df("retracement_level"), y="pct")
+        df2 = create_plot_df("retracement_level")
+
+        subfig = make_subplots(specs=[[{"secondary_y": True}]])
+
+        fig1 = px.bar(df2, x=df2.index, y='pct')
+        fig2 = px.line(df2, x=df2.index, y='prob', color_discrete_sequence=["red"])
+        # fig3 = go.Figure(data=fig.data + fig2.data)
+
+        fig2.update_traces(yaxis="y2")
+        subfig.add_traces(fig1.data + fig2.data)
+
+        subfig.layout.xaxis.title = "Retracement Level"
+        subfig.layout.yaxis.title = "Pct"
+        subfig.layout.yaxis2.title = "Overall likelihood"
+
+        st.plotly_chart(subfig, use_container_width=True)
     elif expansion:
         st.subheader("Distribution of max expansion")
-        st.bar_chart(create_plot_df("expansion_level"), y="pct")
+        # st.bar_chart(create_plot_df("expansion_level"), y="pct")
+
+        df2 = create_plot_df("expansion_level")
+        df2["prob"] = 1 - df2["prob"]
+
+        subfig = make_subplots(specs=[[{"secondary_y": True}]])
+
+        fig1 = px.bar(df2, x=df2.index, y='pct', )
+        fig2 = px.line(df2, x=df2.index, y='prob', color_discrete_sequence=["red"], title="Distribution of max expansion")
+        # fig3 = go.Figure(data=fig.data + fig2.data)
+
+        fig2.update_traces(yaxis="y2")
+        subfig.add_traces(fig1.data + fig2.data)
+
+        subfig.layout.xaxis.title = "Expansion Level"
+        subfig.layout.yaxis.title = "Pct"
+        subfig.layout.yaxis2.title = "Overall likelihood"
+
+        st.plotly_chart(subfig, use_container_width=True)
 
 with tab3:
 
