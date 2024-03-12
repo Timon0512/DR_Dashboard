@@ -1,10 +1,10 @@
 import streamlit as st
 import datetime
+import pytz
 import os
 import pandas as pd
 import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 st.set_page_config(page_title="Defined Range Trading Dashboard", layout="wide")
@@ -48,9 +48,20 @@ def median_time_calcualtion(time_array):
 
 
 with st.sidebar:
+
+    symbol_dict = {"NQ": "Nasdaq 100 Futures",
+                   "ES": "S&P 500 Futures",
+                   "YM": "Dow Jones Futures",
+                   "CL": "Light Crude Oil Futures",
+                   "GC": "Gold Futures",
+                   "EURUSD": "Euro / US- Dollar",
+                   "GBPUSD": "British Pound / US- Dollar",
+                   }
+
     symbol = st.sidebar.selectbox(
         "Choose your Symbol?",
-        ("NQ", "ES", "YM", "CL", "EURUSD", "GBPUSD"))
+        symbol_dict.keys()
+    )
 
     session = st.radio("Choose your Session",
                        ["DR", "oDR"])
@@ -60,9 +71,8 @@ with st.sidebar:
     df = load_data(file)
 
 
-
-
-st.header("DR Analytics Dashboard")
+st.header(f"DR Analytics Dashboard")
+st.write(f':red[{symbol_dict.get(symbol)} ]')
 
 select1, select2 = st.columns(2)
 
@@ -107,10 +117,44 @@ with col2:
     else:
         st.empty()
 
+time_windows = np.unique(df.breakout_window)
+confirmation_time = st.multiselect("Confirmation time of the day", time_windows, default=time_windows)
+df = df[df.breakout_window.isin(confirmation_time)]
 
 data_points = len(df.index)
 
-tab1, tab2, tab3, tab4 = st.tabs(["General Statistics", "Distribution", "FAQ", "Disclaimer"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["General Statistics", "Distribution", "Scenario Manager", "FAQ", "Disclaimer"])
+
+
+def create_plot_df(groupby_column, inverse_percentile=False):
+    plot_df = df.groupby(groupby_column).agg({"breakout_window": "count"})
+    plot_df = plot_df.rename(columns={"breakout_window": "count"})
+    plot_df["pct"] = plot_df["count"] / plot_df["count"].sum()
+    plot_df["percentile"] = plot_df["pct"].cumsum()
+
+    if inverse_percentile:
+        plot_df["percentile"] = 1- plot_df["percentile"]
+
+    return plot_df
+
+
+def create_plotly_plot(df, title, x_title, y1_name="Pct", y2_name="Overall likelihood", y1="pct", y2="percentile",
+                       line_color="red"):
+    subfig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    fig1 = px.bar(df, x=df.index, y=y1)
+    fig2 = px.line(df, x=df.index, y=y2, color_discrete_sequence=[line_color])
+
+    fig2.update_traces(yaxis="y2")
+    subfig.add_traces(fig1.data + fig2.data)
+
+    subfig.layout.xaxis.title = x_title
+    subfig.layout.yaxis.title = y1_name
+    subfig.layout.yaxis2.title = y2_name
+    subfig.layout.title = title
+    subfig.layout.yaxis2.showgrid = False
+
+    return subfig
 
 with tab1:
     st.write("General Statistics")
@@ -158,31 +202,13 @@ with tab1:
     with col7:
         count_dr_winning = len(df[df.close_outside_dr])
         dr_winning_days = count_dr_winning / data_points
-        st.metric("Price closes outside DR", f"{dr_winning_days:.1%}")
+        st.metric("Price closes outside DR", f"{dr_winning_days:.1%}",
+                  help="In direction of DR confirmation")
 
     with col8:
         st.empty()
 
 with tab2:
-
-
-
-    time_windows = np.unique(df.breakout_window)
-    confirmation_time = st.multiselect("Confirmation time of the day", time_windows, default=time_windows)
-    df = df[df.breakout_window.isin(confirmation_time)]
-
-
-
-    st.divider()
-    #####################################################################
-    def create_plot_df(groupby_column):
-
-        plot_df = df.groupby(groupby_column).agg({"breakout_window": "count"})
-        plot_df = plot_df.rename(columns={"breakout_window": "count"})
-        plot_df["pct"] = plot_df["count"] / plot_df["count"].sum()
-        plot_df["prob"] = plot_df["pct"].cumsum()
-
-        return plot_df
 
     col3, col4, col5 = st.columns(3)
 
@@ -194,70 +220,121 @@ with tab2:
 
     with col4:
         median_retracement = median_time_calcualtion(df["max_retracement_time"])
-        st.metric("Median retracement before HoS/LoS", value=str(median_retracement))
+        st.metric("Median retracement before HoS/LoS", value=str(median_retracement),
+                  delta=f"Median retracement value: {df.retracement_level.median()}",
+                  delta_color="inverse")
         retracement = st.button("See Distribution", key="retracement")
 
     with col5:
+
         median_expansion = median_time_calcualtion(df["max_expansion_time"])
-        st.metric("Median time of max expansion", value=str(median_expansion))
+        st.metric("Median time of max expansion", value=str(median_expansion),
+                  delta=f"Median expansion value: {df.expansion_level.median()}",
+                  )
         expansion = st.button("See distribution", key="expansion_time")
 
-    st.divider()
 
     if breakout or (not expansion and not retracement and not breakout):
         st.subheader("Distribution of DR confirmation")
         st.bar_chart(create_plot_df("breakout_window"), y="pct")
     elif retracement:
-        st.subheader("Distribution of max retracement")
-        #st.bar_chart(create_plot_df("retracement_level"), y="pct")
-        df2 = create_plot_df("retracement_level")
 
-        subfig = make_subplots(specs=[[{"secondary_y": True}]])
+        tab_chart, tab_data = st.tabs(["📈 Chart", "🗃 Data"])
+        if dr_side == "Short":
+            df2 = create_plot_df("retracement_level", inverse_percentile=True)
+        else:
+            df2 = create_plot_df("retracement_level")
 
-        fig1 = px.bar(df2, x=df2.index, y='pct')
-        fig2 = px.line(df2, x=df2.index, y='prob', color_discrete_sequence=["red"])
-        # fig3 = go.Figure(data=fig.data + fig2.data)
+        with tab_chart:
+            fig = create_plotly_plot(df2, "Distribution of max retracement", "Retracement Level")
+            st.plotly_chart(fig, use_container_width=True)
+        with tab_data:
+            st.dataframe(df2)
 
-        fig2.update_traces(yaxis="y2")
-        subfig.add_traces(fig1.data + fig2.data)
-
-        subfig.layout.xaxis.title = "Retracement Level"
-        subfig.layout.yaxis.title = "Pct"
-        subfig.layout.yaxis2.title = "Overall likelihood"
-
-        st.plotly_chart(subfig, use_container_width=True)
     elif expansion:
-        st.subheader("Distribution of max expansion")
-        # st.bar_chart(create_plot_df("expansion_level"), y="pct")
 
-        df2 = create_plot_df("expansion_level")
-        df2["prob"] = 1 - df2["prob"]
+        if dr_side == "Short":
+            df2 = create_plot_df("expansion_level", inverse_percentile=True)
+        else:
+            df2 = create_plot_df("expansion_level", inverse_percentile=False)
 
-        subfig = make_subplots(specs=[[{"secondary_y": True}]])
+        tab_chart, tab_data = st.tabs(["📈 Chart", "🗃 Data"])
 
-        fig1 = px.bar(df2, x=df2.index, y='pct', )
-        fig2 = px.line(df2, x=df2.index, y='prob', color_discrete_sequence=["red"], title="Distribution of max expansion")
-        # fig3 = go.Figure(data=fig.data + fig2.data)
-
-        fig2.update_traces(yaxis="y2")
-        subfig.add_traces(fig1.data + fig2.data)
-
-        subfig.layout.xaxis.title = "Expansion Level"
-        subfig.layout.yaxis.title = "Pct"
-        subfig.layout.yaxis2.title = "Overall likelihood"
-
-        st.plotly_chart(subfig, use_container_width=True)
+        with tab_chart:
+            fig = create_plotly_plot(df2, "Distribution of max expansion", "Expansion Level")
+            st.plotly_chart(fig, use_container_width=True)
+        with tab_data:
+            st.dataframe(df2)
 
 with tab3:
 
-    dr = st.expander("What does DR stand for?")
-    dr.write("DR stands for defined range and refers to the price range that the price covers within the first hour of trading after the stock exchange opens.")
+    if dr_side == "All":
+        st.warning("Select a DR confirmation side to get useful results.")
+
+    col9, col10, col11 = st.columns(3)
+
+    with col9:
+        cur_rt_lvl = round(st.number_input("What is your current level of retracement?", value=0.5, step=0.1), 2)
+
+    with col10:
+        ny_time = datetime.datetime.now(pytz.timezone('America/New_York'))
+        #cur_time = st.time_input("What is your current time?", value=ny_time)
+        st.empty()
+
+    with col11:
+        st.empty()
+
+    if dr_side == "Long":
+        df_sub = df[df.retracement_level <= cur_rt_lvl]
+    else:
+        df_sub = df[df.retracement_level >= cur_rt_lvl]
+
+    sub_data_points = len(df_sub.index)
+
+    st.divider()
+
+    col12, col13, col14, col15 = st.columns(4)
+
+    with col12:
+        count_dr_true_sub = len(df_sub[df_sub['dr_true']])
+        dr_true_sub = count_dr_true_sub / sub_data_points
+        st.metric("Probability that DR rule holds True", f"{dr_true_sub:.1%}")
+
+    with col13:
+        count_close_outside_dr = len(df_sub[df_sub.close_outside_dr])
+        dr_winning_days_sub = count_close_outside_dr / sub_data_points
+        st.metric("Probability that price closes outside DR", f"{dr_winning_days_sub:.1%}",
+                  help="In direction of DR confirmation")
+
+    with col14:
+        median_scenario_ret = df_sub.retracement_level.median()
+        median_retracement_sub = median_time_calcualtion(df_sub["max_retracement_time"])
+        st.metric(f"median retracement time for this scenario is", str(median_retracement_sub),
+                  delta=f"Median retracement level: {median_scenario_ret}")
+
+    with col15:
+
+        median_scenario_exp = df_sub.expansion_level.median()
+        median_expansion_sub = median_time_calcualtion(df_sub["max_expansion_time"])
+
+        st.metric(f"median expansion time for this scenario is", str(median_expansion_sub),
+                  delta=f"Median expansion level: {median_scenario_exp}")
+
+    col1, col2 = st.columns(2)
+
+    st.write(f"Subset of :red[{len(df_sub)}] datapoints are used for this scenario.")
+
+
+with tab4:
+
+    dr = st.expander("What does DR/IDR stand for?")
+    dr.write("DR stands for defining range and refers to the price range that the price covers within the first hour of trading after the stock exchange opens.")
+    dr.write("IDR stands for implied defining range (body close/open high/lows) and refers to the price range that the price covers within the first hour of trading after the stock exchange opens.")
 
     dr_confirmation = st.expander("What is a DR confirmation (Long/Short)")
     dr_confirmation.write("A DR confirmation refers to the closing of a 5-minute candle above or below the DR high / DR low price level. A close above the DR high is a long confirmation and a close below the DR low level is a short confirmation. ")
 
     dr_rule = st.expander("What is the DR Rule?")
-
     dr_rule.write("The DR Rule states that it is very unlikely that the price will close below/above the other side of the DR Range after it has confirmed one side. "
                   "The historical percentages for this can be found in this dashboard.")
 
@@ -270,7 +347,7 @@ with tab3:
     get_rich.write("No, definitely not!")
     get_rich.write("You should definitely read the disclaimer.")
 
-with tab4:
+with tab5:
     st.write(
         "The information provided on this website is for informational purposes only and should not be considered as financial advice. "
         "The trading-related statistics presented on this homepage are intended to offer general insights into market trends and patterns. ")
@@ -291,4 +368,4 @@ with tab4:
     )
 
 st.divider()
-st.write(f"Statistics based on data points: :green[{data_points}]")
+st.write(f"Statistics based on data points: :red[{len(df)}]")
