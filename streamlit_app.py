@@ -7,7 +7,7 @@ import numpy as np
 import plotly.express as px
 from plotly.subplots import make_subplots
 
-st.set_page_config(page_title="Defined Range Trading Dashboard", layout="wide")
+st.set_page_config(page_title="Defining Range Trading Dashboard", layout="wide")
 
 @st.cache_data
 def load_data(file_path):
