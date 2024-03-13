@@ -1,5 +1,5 @@
 import streamlit as st
-import datetime
+from datetime import datetime, time
 import pytz
 import os
 import pandas as pd
@@ -18,17 +18,20 @@ def median_time_calcualtion(time_array):
     def parse_to_time(value):
         if pd.isna(value):
             return None
-        try:
-            return datetime.datetime.strptime(value, "%H:%M:%S").time()
-        except ValueError:
-            raise ValueError("Ungültiges Format. Erwartet wird ein String im Format 'Stunde:Minute:Sekunde'.")
+        if isinstance(value, time):
+            return value
+        else:
+            try:
+                return datetime.strptime(value, "%H:%M:%S").time()
+            except ValueError:
+                raise ValueError("Ungültiges Format. Erwartet wird ein String im Format 'Stunde:Minute:Sekunde'.")
 
     def time_to_seconds(time_obj):
 
         return time_obj.hour * 3600 + time_obj.minute * 60 + time_obj.second
 
     def seconds_to_time(seconds):
-        return datetime.time(seconds // 3600, (seconds % 3600) // 60, seconds % 60)
+        return time(seconds // 3600, (seconds % 3600) // 60, seconds % 60)
 
     # Parsen zu datetime.time
     parsed_times = [parse_to_time(value) for value in time_array]
@@ -269,25 +272,38 @@ with tab2:
 with tab3:
 
     if dr_side == "All":
-        st.warning("Select a DR confirmation side to get useful results.")
+        st.error("Select a DR confirmation side to get useful results.")
+    else:
+        time_mode = st.checkbox("Consider time as filter option")
 
     col9, col10, col11 = st.columns(3)
 
     with col9:
-        cur_rt_lvl = round(st.number_input("What is your current level of retracement?", value=0.5, step=0.1), 2)
+        cur_rt_lvl = round(st.number_input("What is your current level of retracement?", value=0.5, step=0.1,
+                                           help="Deselects datapoints that show a less strong retracenent"), 2)
+        if dr_side == "Long":
+            df_sub = df[df.retracement_level <= cur_rt_lvl]
+        else:
+            df_sub = df[df.retracement_level >= cur_rt_lvl]
 
     with col10:
-        ny_time = datetime.datetime.now(pytz.timezone('America/New_York'))
-        #cur_time = st.time_input("What is your current time?", value=ny_time)
-        st.empty()
+
+        if dr_side != "All":
+            if time_mode:
+                ny_time = datetime.now(pytz.timezone('America/New_York'))
+                cur_time = st.time_input("Deselect max retracement times before:" , value=ny_time,
+                                         help="Deselects datapoints where the maximum of retracement already happend")
+
+                df_sub['max_retracement_time'] = pd.to_datetime(df_sub['max_retracement_time'], format='%H:%M:%S').dt.time
+
+                df_sub = df_sub[df_sub.max_retracement_time >= cur_time]
+            else:
+                st.empty()
 
     with col11:
         st.empty()
 
-    if dr_side == "Long":
-        df_sub = df[df.retracement_level <= cur_rt_lvl]
-    else:
-        df_sub = df[df.retracement_level >= cur_rt_lvl]
+
 
     sub_data_points = len(df_sub.index)
 
