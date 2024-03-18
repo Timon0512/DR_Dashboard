@@ -417,7 +417,7 @@ with scenario_manager:
             st.plotly_chart(fig, use_container_width=True)
         with col_6:
             df2_sub = create_plot_df(df_sub, "expansion_level", inverse_percentile=not inv_param)
-            fig = create_plotly_plot(df2_sub, "Distribution of max retracement", "Retracement Level")
+            fig = create_plotly_plot(df2_sub, "Distribution of max expansion", "Expansion Level")
             st.plotly_chart(fig, use_container_width=True)
 
 
