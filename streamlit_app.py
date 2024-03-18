@@ -14,6 +14,7 @@ def load_data(file_path):
     df = pd.read_csv(file_path, sep=";", index_col=0, parse_dates=True)
     return df
 
+
 def median_time_calcualtion(time_array):
     def parse_to_time(value):
         if pd.isna(value):
@@ -59,6 +60,7 @@ with st.sidebar:
                    "GC": "Gold Futures",
                    "EURUSD": "Euro / US- Dollar",
                    "GBPUSD": "British Pound / US- Dollar",
+                   "FDAX": "DAX Futures"
                    }
 
     symbol = st.sidebar.selectbox(
@@ -125,11 +127,12 @@ confirmation_time = st.multiselect("Confirmation time of the day", time_windows,
 df = df[df.breakout_window.isin(confirmation_time)]
 
 data_points = len(df.index)
+inv_param = [False if dr_side == "Long" else True][0]
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["General Statistics", "Distribution", "Scenario Manager", "FAQ", "Disclaimer"])
+general_tab, distribution_tab, scenario_manager, tab4, tab5, tab6= st.tabs(["General Statistics", "Distribution", "Scenario Manager", "FAQ", "Disclaimer", "Test"])
 
 
-def create_plot_df(groupby_column, inverse_percentile=False):
+def create_plot_df(df, groupby_column, inverse_percentile=False):
     plot_df = df.groupby(groupby_column).agg({"breakout_window": "count"})
     plot_df = plot_df.rename(columns={"breakout_window": "count"})
     plot_df["pct"] = plot_df["count"] / plot_df["count"].sum()
@@ -159,8 +162,11 @@ def create_plotly_plot(df, title, x_title, y1_name="Pct", y2_name="Overall likel
 
     return subfig
 
-with tab1:
-    st.write("General Statistics")
+def create_scatter_plot(df):
+    pass
+
+
+with general_tab:
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -186,7 +192,21 @@ with tab1:
 
     with col4:
 
-        st.empty()
+        if dr_side == "Long":
+
+            breach_count = len(df[df['breached_dr_low']])
+            breach_pct = 1 - (breach_count / data_points)
+            st.metric("DR low unbreached", f"{breach_pct:.1%}",
+                      help="% of days where price doesn´t wicks below DR low")
+
+        elif dr_side == "Short":
+            breach_count = len(df[df['breached_dr_high']])
+            breach_pct = 1 - (breach_count / data_points)
+            st.metric("DR high unbreached", f"{breach_pct:.1%}",
+                      help="% of days where price doesn´t wicks above DR high")
+
+        else:
+            st.empty()
 
     col5, col6, col7, col8 = st.columns(4)
 
@@ -211,7 +231,7 @@ with tab1:
     with col8:
         st.empty()
 
-with tab2:
+with distribution_tab:
 
     col3, col4, col5 = st.columns(3)
 
@@ -239,14 +259,14 @@ with tab2:
 
     if breakout or (not expansion and not retracement and not breakout):
         st.subheader("Distribution of DR confirmation")
-        st.bar_chart(create_plot_df("breakout_window"), y="pct")
+        st.bar_chart(create_plot_df(df, "breakout_window"), y="pct")
     elif retracement:
 
         tab_chart, tab_data = st.tabs(["📈 Chart", "🗃 Data"])
         if dr_side == "Short":
-            df2 = create_plot_df("retracement_level", inverse_percentile=True)
+            df2 = create_plot_df(df, "retracement_level", inverse_percentile=True)
         else:
-            df2 = create_plot_df("retracement_level")
+            df2 = create_plot_df(df, "retracement_level")
 
         with tab_chart:
             fig = create_plotly_plot(df2, "Distribution of max retracement", "Retracement Level")
@@ -257,9 +277,9 @@ with tab2:
     elif expansion:
 
         if dr_side == "Short":
-            df2 = create_plot_df("expansion_level", inverse_percentile=True)
+            df2 = create_plot_df(df, "expansion_level", inverse_percentile=True)
         else:
-            df2 = create_plot_df("expansion_level", inverse_percentile=False)
+            df2 = create_plot_df(df, "expansion_level", inverse_percentile=False)
 
         tab_chart, tab_data = st.tabs(["📈 Chart", "🗃 Data"])
 
@@ -269,28 +289,34 @@ with tab2:
         with tab_data:
             st.dataframe(df2)
 
-with tab3:
+with scenario_manager:
+    ny_time = datetime.now(pytz.timezone('America/New_York'))
+    col_1, col_2 = st.columns(2)
 
-    if dr_side == "All":
-        st.error("Select a DR confirmation side to get useful results.")
-    else:
+    with col_1:
+        dr_conf = st.checkbox("DR Confirmation", value=True)
+
+    with col_2:
         time_mode = st.checkbox("Consider time as filter option")
 
     col9, col10, col11 = st.columns(3)
+    #Confirmation Scenario
+    if dr_conf:
+        if dr_side == "All":
+            st.error("Please select DR confirmation side for useful results!")
 
-    with col9:
-        cur_rt_lvl = round(st.number_input("What is your current level of retracement?", value=0.5, step=0.1,
-                                           help="Deselects datapoints that show a less strong retracenent"), 2)
-        if dr_side == "Long":
-            df_sub = df[df.retracement_level <= cur_rt_lvl]
-        else:
-            df_sub = df[df.retracement_level >= cur_rt_lvl]
+        with col9:
+            cur_rt_lvl = round(st.number_input("What is your current level of retracement?", value=0.5, step=0.1,
+                                               help="Deselects datapoints that show a less strong retracenent"), 2)
+            if dr_side == "Long":
+                df_sub = df[df.retracement_level <= cur_rt_lvl]
+            else:
+                df_sub = df[df.retracement_level >= cur_rt_lvl]
 
-    with col10:
+        with col10:
 
-        if dr_side != "All":
             if time_mode:
-                ny_time = datetime.now(pytz.timezone('America/New_York'))
+
                 cur_time = st.time_input("Deselect max retracement times before:" , value=ny_time,
                                          help="Deselects datapoints where the maximum of retracement already happend")
 
@@ -299,28 +325,54 @@ with tab3:
                 df_sub = df_sub[df_sub.max_retracement_time >= cur_time]
             else:
                 st.empty()
+        with col11:
+            st.empty()
 
-    with col11:
+    # Scenario before Confirmation
+    else:
+        df_sub = df
+        if (dr_side != "All") or (greenbox == "All"):
+            st.error("Please select confirmation side option \"All\" and a greenbox side for correct results!")
+        if time_mode:
+            col_3, col_4 = st.columns(2)
+            with col_3:
+                cur_time = st.time_input("Deselect with confirmation before:", value=ny_time,
+                                         help="Deselects datapoints where the confirmation already happend")
+
+                df_sub['max_retracement_time'] = pd.to_datetime(df_sub['breakout_time'], format='%H:%M:%S').dt.time
+
+                df_sub = df_sub[df_sub.max_retracement_time >= cur_time]
+            with col_4:
+                st.empty()
+
+
         st.empty()
-
-
-
-    sub_data_points = len(df_sub.index)
 
     st.divider()
 
     col12, col13, col14, col15 = st.columns(4)
 
+    sub_data_points = len(df_sub.index)
+
     with col12:
-        count_dr_true_sub = len(df_sub[df_sub['dr_true']])
-        dr_true_sub = count_dr_true_sub / sub_data_points
-        st.metric("Probability that DR rule holds True", f"{dr_true_sub:.1%}")
+        if dr_conf:
+            count_dr_true_sub = len(df_sub[df_sub['dr_true']])
+            dr_true_sub = count_dr_true_sub / sub_data_points
+            st.metric("Probability that DR rule holds True", f"{dr_true_sub:.1%}")
+        else:
+            count_dr_up_sub = len(df_sub[df_sub['dr_upday']])
+            st.metric("Probability of Long confirmation", f"{count_dr_up_sub/ sub_data_points:.1%}")
 
     with col13:
-        count_close_outside_dr = len(df_sub[df_sub.close_outside_dr])
-        dr_winning_days_sub = count_close_outside_dr / sub_data_points
-        st.metric("Probability that price closes outside DR", f"{dr_winning_days_sub:.1%}",
-                  help="In direction of DR confirmation")
+        if dr_conf:
+            count_close_outside_dr = len(df_sub[df_sub.close_outside_dr])
+            dr_winning_days_sub = count_close_outside_dr / sub_data_points
+            st.metric("Probability that price closes outside DR", f"{dr_winning_days_sub:.1%}",
+                      help="In direction of DR confirmation")
+
+        else:
+           # count_dr_up_sub = len(df_sub[df_sub['dr_upday']])
+            st.metric("Probability of Short confirmation", f"{1 - (count_dr_up_sub/ sub_data_points):.1%}")
 
     with col14:
         median_scenario_ret = df_sub.retracement_level.median()
@@ -336,7 +388,49 @@ with tab3:
         st.metric(f"median expansion time for this scenario is", str(median_expansion_sub),
                   delta=f"Median expansion level: {median_scenario_exp}")
 
-    col1, col2 = st.columns(2)
+    col16, col17 = st.columns(2)
+
+    with col16:
+        if dr_side == "Long":
+
+            breach_count = len(df_sub[df_sub['breached_dr_low']])
+            breach_pct = 1 - (breach_count / sub_data_points)
+            st.metric("DR low unbreached", f"{breach_pct:.1%}",
+                      help="% of days where price doesn´t wicks below DR low")
+
+        elif dr_side == "Short":
+            breach_count = len(df_sub[df_sub['breached_dr_high']])
+            breach_pct = 1 - (breach_count / sub_data_points)
+            st.metric("DR high unbreached", f"{breach_pct:.1%}",
+                      help="% of days where price doesn´t wicks above DR high")
+
+        else:
+            st.empty()
+
+    # Plotting Area
+    col_5, col_6 = st.columns(2)
+    if dr_conf:
+
+        with col_5:
+            df2_sub = create_plot_df(df_sub, "retracement_level", inverse_percentile=inv_param)
+            fig = create_plotly_plot(df2_sub, "Distribution of max retracement", "Retracement Level")
+            st.plotly_chart(fig, use_container_width=True)
+        with col_6:
+            df2_sub = create_plot_df(df_sub, "expansion_level", inverse_percentile=not inv_param)
+            fig = create_plotly_plot(df2_sub, "Distribution of max retracement", "Retracement Level")
+            st.plotly_chart(fig, use_container_width=True)
+
+
+    else:
+        conf_plot = df_sub.groupby("closing_level").agg(
+            {"dr_upday": "mean", "dr_true": "count"}).rename(
+            columns={"dr_upday": "pct", "dr_true": "count"})
+
+        if greenbox == "False":
+            conf_plot[" "] = 1 - conf_plot["pct"]
+
+        fig = px.bar(conf_plot, y='pct', x=conf_plot.index, text='count')
+        st.plotly_chart(fig, use_container_width=True)
 
     st.write(f"Subset of :red[{len(df_sub)}] datapoints are used for this scenario.")
 
@@ -358,6 +452,9 @@ with tab4:
 
     greenbox_rule = st.expander("What is a greenbox?")
     greenbox_rule.write("The greenbox is defined by the opening price and the closing price of the DR range. If the closing price is quoted above the opening price, then the DR range is a green box.")
+
+    indicator = st.expander("Is there a good TradingView indicator?")
+    indicator.write("I personally like the TheMas7er scalp (US equity) 5min [promuckaj] indicator. It comes with a lot of features but there are plenty of other free indicators available")
 
     get_rich = st.expander("Will this dashboard help me get rich quick?")
     get_rich.write("No, definitely not!")
@@ -383,5 +480,10 @@ with tab5:
         "By accessing this website, you acknowledge and agree to the terms of this disclaimer. The content on this homepage is subject to change without notice."
     )
 
+with tab6:
+
+    st.empty()
+
 st.divider()
 st.write(f"Statistics based on data points: :red[{len(df)}]")
+
