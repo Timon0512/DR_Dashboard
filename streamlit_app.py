@@ -132,7 +132,7 @@ inv_param = [False if dr_side == "Long" else True][0]
 general_tab, distribution_tab, scenario_manager, tab4, tab5, tab6= st.tabs(["General Statistics", "Distribution", "Scenario Manager", "FAQ", "Disclaimer", "Test"])
 
 
-def create_plot_df(df, groupby_column, inverse_percentile=False):
+def create_plot_df(df, groupby_column, inverse_percentile=False, ascending=True):
     plot_df = df.groupby(groupby_column).agg({"breakout_window": "count"})
     plot_df = plot_df.rename(columns={"breakout_window": "count"})
     plot_df["pct"] = plot_df["count"] / plot_df["count"].sum()
@@ -141,11 +141,13 @@ def create_plot_df(df, groupby_column, inverse_percentile=False):
     if inverse_percentile:
         plot_df["percentile"] = 1- plot_df["percentile"]
 
+    if not ascending:
+        plot_df = plot_df.sort_index(ascending=False)
     return plot_df
 
 
 def create_plotly_plot(df, title, x_title, y1_name="Pct", y2_name="Overall likelihood", y1="pct", y2="percentile",
-                       line_color="red"):
+                       line_color="red", reversed_x_axis=False):
     subfig = make_subplots(specs=[[{"secondary_y": True}]])
 
     fig1 = px.bar(df, x=df.index, y=y1)
@@ -159,6 +161,11 @@ def create_plotly_plot(df, title, x_title, y1_name="Pct", y2_name="Overall likel
     subfig.layout.yaxis2.title = y2_name
     subfig.layout.title = title
     subfig.layout.yaxis2.showgrid = False
+
+    if reversed_x_axis:
+        subfig.update_layout(
+            xaxis=dict(autorange="reversed")
+        )
 
     return subfig
 
@@ -264,12 +271,15 @@ with distribution_tab:
 
         tab_chart, tab_data = st.tabs(["📈 Chart", "🗃 Data"])
         if dr_side == "Short":
-            df2 = create_plot_df(df, "retracement_level", inverse_percentile=True)
+            df2 = create_plot_df(df, "retracement_level", inverse_percentile=False, ascending=True)
         else:
-            df2 = create_plot_df(df, "retracement_level")
+            df2 = create_plot_df(df, "retracement_level", inverse_percentile=True)
 
         with tab_chart:
-            fig = create_plotly_plot(df2, "Distribution of max retracement", "Retracement Level")
+            if dr_side == "Short":
+                fig = create_plotly_plot(df2, "Distribution of max retracement", "Retracement Level", reversed_x_axis=False)
+            else:
+                fig = create_plotly_plot(df2, "Distribution of max retracement", "Retracement Level", reversed_x_axis=True)
             st.plotly_chart(fig, use_container_width=True)
         with tab_data:
             st.dataframe(df2)
@@ -277,18 +287,23 @@ with distribution_tab:
     elif expansion:
 
         if dr_side == "Short":
-            df2 = create_plot_df(df, "expansion_level", inverse_percentile=True)
+            df2 = create_plot_df(df, "expansion_level", inverse_percentile=True, ascending=False)
         else:
             df2 = create_plot_df(df, "expansion_level", inverse_percentile=False)
 
         tab_chart, tab_data = st.tabs(["📈 Chart", "🗃 Data"])
 
         with tab_chart:
-            fig = create_plotly_plot(df2, "Distribution of max expansion", "Expansion Level")
+            if dr_side == "Short":
+                fig = create_plotly_plot(df2, "Distribution of max expansion", "Expansion Level", reversed_x_axis=True)
+            else:
+                fig = create_plotly_plot(df2, "Distribution of max expansion", "Expansion Level", reversed_x_axis=False)
             st.plotly_chart(fig, use_container_width=True)
         with tab_data:
             st.dataframe(df2)
 
+    st.caption("The :red[red] line is the cumulative sum of the individual probabilities. It shows how many retracements/expansions have already ended at the corresponding level in the past.")
+    st.caption("Level :red[0] is the low of the DR range and level :red[1] is the high of the DR range (wicks).")
 with scenario_manager:
     ny_time = datetime.now(pytz.timezone('America/New_York'))
     col_1, col_2 = st.columns(2)
