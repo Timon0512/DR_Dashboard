@@ -75,6 +75,13 @@ with st.sidebar:
 
     df = load_data(file)
 
+    st.divider()
+    start_date = df.index[0].strftime("%Y-%m-%d")
+    end_date = df.index[-1].strftime("%Y-%m-%d")
+    st.write(f"First date in dataset: :red[{start_date}]")
+    st.write(f"Last date in dataset: :red[{end_date}]")
+
+
 
 st.header(f"DR Analytics Dashboard")
 st.write(f':red[{symbol_dict.get(symbol)} ]')
@@ -129,7 +136,7 @@ df = df[df.breakout_window.isin(confirmation_time)]
 data_points = len(df.index)
 inv_param = [False if dr_side == "Long" else True][0]
 
-general_tab, distribution_tab, scenario_manager, tab4, tab5, tab6= st.tabs(["General Statistics", "Distribution", "Scenario Manager", "FAQ", "Disclaimer", "Test"])
+general_tab, distribution_tab, scenario_manager, faq_tab, disclaimer= st.tabs(["General Statistics", "Distribution", "Scenario Manager", "FAQ", "Disclaimer"])
 
 
 def create_plot_df(df, groupby_column, inverse_percentile=False, ascending=True):
@@ -304,6 +311,7 @@ with distribution_tab:
 
     st.caption("The :red[red] line is the cumulative sum of the individual probabilities. It shows how many retracements/expansions have already ended at the corresponding level in the past.")
     st.caption("Level :red[0] is the low of the DR range and level :red[1] is the high of the DR range (wicks).")
+
 with scenario_manager:
     ny_time = datetime.now(pytz.timezone('America/New_York'))
     col_1, col_2 = st.columns(2)
@@ -449,8 +457,7 @@ with scenario_manager:
 
     st.write(f"Subset of :red[{len(df_sub)}] datapoints are used for this scenario.")
 
-
-with tab4:
+with faq_tab:
 
     dr = st.expander("What does DR/IDR stand for?")
     dr.write("DR stands for defining range and refers to the price range that the price covers within the first hour of trading after the stock exchange opens.")
@@ -471,11 +478,14 @@ with tab4:
     indicator = st.expander("Is there a good TradingView indicator?")
     indicator.write("I personally like the TheMas7er scalp (US equity) 5min [promuckaj] indicator. It comes with a lot of features but there are plenty of other free indicators available")
 
+    data_refresh = st.expander("How often is the data updated?")
+    data_refresh.write("At the moment the collection of data is a time intensive manual process. Therefore there is no regular interval. I will update the data once in while.")
+
     get_rich = st.expander("Will this dashboard help me get rich quick?")
     get_rich.write("No, definitely not!")
     get_rich.write("You should definitely read the disclaimer.")
 
-with tab5:
+with disclaimer:
     st.write(
         "The information provided on this website is for informational purposes only and should not be considered as financial advice. "
         "The trading-related statistics presented on this homepage are intended to offer general insights into market trends and patterns. ")
@@ -495,9 +505,9 @@ with tab5:
         "By accessing this website, you acknowledge and agree to the terms of this disclaimer. The content on this homepage is subject to change without notice."
     )
 
-with tab6:
-
-    st.empty()
+# with test:
+#
+#     st.empty()
 
 st.divider()
 st.write(f"Statistics based on data points: :red[{len(df)}]")
