@@ -79,7 +79,7 @@ with st.sidebar:
     st.divider()
 
 
-
+breakout = True
 
 st.header(f"DR Analytics Dashboard")
 st.write(f':red[{symbol_dict.get(symbol)} ]')
@@ -275,12 +275,12 @@ with distribution_tab:
     with col3:
         median_time = median_time_calcualtion(df["breakout_time"])
         # median_time = statistics.median(df2["breakout_time"])
-        st.metric("Median breakout time", value=str(median_time))
-        breakout = st.button("See Breakout Distribution", key="breakout")
+        st.metric("Median confirmation time:", value=str(median_time))
+        breakout = st.button("See Confirmation Distribution", key="breakout")
 
     with col4:
         median_retracement = median_time_calcualtion(df["max_retracement_time"])
-        st.metric("Median retracement before HoS/LoS", value=str(median_retracement),
+        st.metric("Median retracement before HoS/LoS:", value=str(median_retracement),
                   delta=f"Median retracement value: {df.retracement_level.median()}",
                   delta_color="inverse")
         retracement = st.button("See Distribution", key="retracement")
@@ -288,15 +288,17 @@ with distribution_tab:
     with col5:
 
         median_expansion = median_time_calcualtion(df["max_expansion_time"])
-        st.metric("Median time of max expansion", value=str(median_expansion),
+        st.metric("Median time of max expansion:", value=str(median_expansion),
                   delta=f"Median expansion value: {df.expansion_level.median()}",
                   )
         expansion = st.button("See distribution", key="expansion_time")
 
 
-    if breakout or (not expansion and not retracement and not breakout):
-        st.subheader("Distribution of DR confirmation")
+    #if breakout or (not expansion and not retracement and not breakout):
+    if breakout:
+        st.write("**Distribution of DR confirmation**")
         st.bar_chart(create_plot_df(df, "breakout_window"), y="pct")
+
     elif retracement:
 
         tab_chart, tab_data = st.tabs(["📈 Chart", "🗃 Data"])
@@ -313,6 +315,12 @@ with distribution_tab:
                 fig = create_plotly_plot(df2, "Distribution of max retracement before high/low of the session", "Retracement Level", reversed_x_axis=True)
             st.plotly_chart(fig, use_container_width=True)
 
+            if not breakout:
+                st.caption(
+                    "The :red[red] line is the cumulative sum of the individual probabilities. It shows how many retracements/expansions have already ended at the corresponding level in the past.")
+                st.caption(
+                    "Level :red[0] is the low of the DR range and level :red[1] is the high of the DR range (wicks).")
+            st.divider()
             st.write("**Distribution of max retracement time before high/low of the session**")
             st.bar_chart(df.groupby("max_retracement_time").agg({"max_retracement_value": "count"}), use_container_width=True)
 
@@ -335,13 +343,18 @@ with distribution_tab:
                 fig = create_plotly_plot(df2, "Distribution of max expansion before high/low of the session", "Expansion Level", reversed_x_axis=False)
             st.plotly_chart(fig, use_container_width=True)
 
+            if not breakout:
+                st.caption(
+                    "The :red[red] line is the cumulative sum of the individual probabilities. It shows how many retracements/expansions have already ended at the corresponding level in the past.")
+                st.caption(
+                    "Level :red[0] is the low of the DR range and level :red[1] is the high of the DR range (wicks).")
+            st.divider()
+
             st.write("**Distribution of max expansion time before high/low of the session**")
             st.bar_chart(df.groupby("max_expansion_time").agg({"max_expansion_value": "count"}), use_container_width=True)
         with tab_data:
             st.dataframe(df2)
 
-    st.caption("The :red[red] line is the cumulative sum of the individual probabilities. It shows how many retracements/expansions have already ended at the corresponding level in the past.")
-    st.caption("Level :red[0] is the low of the DR range and level :red[1] is the high of the DR range (wicks).")
 
 with scenario_manager:
     ny_time = datetime.now(pytz.timezone('America/New_York'))
