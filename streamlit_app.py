@@ -10,6 +10,7 @@ from plotly.subplots import make_subplots
 st.set_page_config(page_title="Defining Range Trading Dashboard", layout="wide")
 
 @st.cache_data
+
 def load_data(file_path):
     df = pd.read_csv(file_path, sep=";", index_col=0, parse_dates=True)
     return df
@@ -76,10 +77,7 @@ with st.sidebar:
     df = load_data(file)
 
     st.divider()
-    start_date = df.index[0].strftime("%Y-%m-%d")
-    end_date = df.index[-1].strftime("%Y-%m-%d")
-    st.write(f"First date in dataset: :red[{start_date}]")
-    st.write(f"Last date in dataset: :red[{end_date}]")
+
 
 
 
@@ -176,9 +174,34 @@ def create_plotly_plot(df, title, x_title, y1_name="Pct", y2_name="Overall likel
 
     return subfig
 
-def create_scatter_plot(df):
-    pass
+def create_join_table(first_symbol, second_symbol):
 
+    cols_to_use = ["date", "greenbox", "breakout_time", "dr_upday", "max_retracement_time", "max_expansion_time", "retracement_level", "expansion_level", "closing_level"]
+
+    first_symbol = first_symbol.lower()
+    second_symbol = second_symbol.lower()
+
+    file1 = os.path.join("dr_data", f"{first_symbol}_{session.lower()}.csv")
+    file2 = os.path.join("dr_data", f"{second_symbol}_{session.lower()}.csv")
+
+    if first_symbol == second_symbol:
+        pass
+
+    df1 = pd.read_csv(file1, sep=";", index_col=[0], usecols=cols_to_use)
+    df2 = pd.read_csv(file2, sep=";", index_col=[0], usecols=cols_to_use)
+
+    df_join = df1.join(df2, lsuffix=f"_{first_symbol}", rsuffix=f"_{second_symbol}", how="left")
+
+
+
+    # df[f"breakout_time_{first_symbol}"] = pd.to_datetime(df[f"breakout_time_{first_symbol}"], format="%H:%M:%S")
+    # df[f"breakout_time_{second_symbol}"] = pd.to_datetime(df[f"breakout_time_{second_symbol}"], format="%H:%M:%S")
+
+    # df["breakout_dif"] = (df[f"breakout_time_{second_symbol}"] - df[f"breakout_time_{first_symbol}"]).dt.total_seconds()/60
+    # df["retracement_dif"] = df[f"retracement_level_es"] - df["retracement_level_nq"]
+    # df["expansion_dif"] = df["expansion_level_es"] - df["expansion_level_nq"]
+
+    return df_join
 
 with general_tab:
 
@@ -282,12 +305,17 @@ with distribution_tab:
         else:
             df2 = create_plot_df(df, "retracement_level", inverse_percentile=True)
 
+
         with tab_chart:
             if dr_side == "Short":
-                fig = create_plotly_plot(df2, "Distribution of max retracement", "Retracement Level", reversed_x_axis=False)
+                fig = create_plotly_plot(df2, "Distribution of max retracement before high/low of the session", "Retracement Level", reversed_x_axis=False)
             else:
-                fig = create_plotly_plot(df2, "Distribution of max retracement", "Retracement Level", reversed_x_axis=True)
+                fig = create_plotly_plot(df2, "Distribution of max retracement before high/low of the session", "Retracement Level", reversed_x_axis=True)
             st.plotly_chart(fig, use_container_width=True)
+
+            st.write("**Distribution of max retracement time before high/low of the session**")
+            st.bar_chart(df.groupby("max_retracement_time").agg({"max_retracement_value": "count"}), use_container_width=True)
+
         with tab_data:
             st.dataframe(df2)
 
@@ -302,10 +330,13 @@ with distribution_tab:
 
         with tab_chart:
             if dr_side == "Short":
-                fig = create_plotly_plot(df2, "Distribution of max expansion", "Expansion Level", reversed_x_axis=True)
+                fig = create_plotly_plot(df2, "Distribution of max expansion before high/low of the session", "Expansion Level", reversed_x_axis=True)
             else:
-                fig = create_plotly_plot(df2, "Distribution of max expansion", "Expansion Level", reversed_x_axis=False)
+                fig = create_plotly_plot(df2, "Distribution of max expansion before high/low of the session", "Expansion Level", reversed_x_axis=False)
             st.plotly_chart(fig, use_container_width=True)
+
+            st.write("**Distribution of max expansion time before high/low of the session**")
+            st.bar_chart(df.groupby("max_expansion_time").agg({"max_expansion_value": "count"}), use_container_width=True)
         with tab_data:
             st.dataframe(df2)
 
@@ -510,5 +541,8 @@ with disclaimer:
 #     st.empty()
 
 st.divider()
-st.write(f"Statistics based on data points: :red[{len(df)}]")
+start_date = df.index[0].strftime("%Y-%m-%d")
+end_date = df.index[-1].strftime("%Y-%m-%d")
+st.write(f"Statistics based on :red[{len(df)}] data points from :red[{start_date}] to :red[{end_date}]")
 
+#st.write(create_join_table(symbol, "es"))
