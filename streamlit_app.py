@@ -6,8 +6,12 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 from plotly.subplots import make_subplots
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+import pickle
 
-st.set_page_config(page_title="Defining Range Trading Dashboard", layout="wide")
+
+st.set_page_config(page_title="Range Breakout Analytics Dashboard", layout="wide")
 
 @st.cache_data
 
@@ -68,11 +72,12 @@ with st.sidebar:
         "Choose your Symbol?",
         symbol_dict.keys()
     )
-
+    session_dict = {"New York (9:30 - 16:00 EST)": "dr", "London (3:00 - 8:30 EST)": "odr"}
     session = st.radio("Choose your Session",
-                       ["DR", "oDR"])
+                        ["New York (9:30 - 16:00 EST)", "London (3:00 - 8:30 EST)"])
+                    #    ["DR", "oDR"])
 
-    file = os.path.join("dr_data", f"{symbol.lower()}_{session.lower()}.csv")
+    file = os.path.join("dr_data", f"{symbol.lower()}_{session_dict.get(session)}.csv")
 
     df = load_data(file)
 
@@ -81,7 +86,7 @@ with st.sidebar:
 
 breakout = True
 
-st.header(f"DR Analytics Dashboard")
+st.header(f"Opening Range Breakout Analytics")
 st.write(f':red[{symbol_dict.get(symbol)} ]')
 
 select1, select2 = st.columns(2)
@@ -134,7 +139,7 @@ df = df[df.breakout_window.isin(confirmation_time)]
 data_points = len(df.index)
 inv_param = [False if dr_side == "Long" else True][0]
 
-general_tab, distribution_tab, scenario_manager, faq_tab, disclaimer= st.tabs(["General Statistics", "Distribution", "Scenario Manager", "FAQ", "Disclaimer"])
+general_tab, distribution_tab, scenario_manager, strategy ,faq_tab, disclaimer, ml= st.tabs(["General Statistics", "Distribution", "Scenario Manager", "The Strategy", "FAQ", "Disclaimer", "Machine Learning"])
 
 
 def create_plot_df(df, groupby_column, inverse_percentile=False, ascending=True):
@@ -202,6 +207,22 @@ def create_join_table(first_symbol, second_symbol):
     # df["expansion_dif"] = df["expansion_level_es"] - df["expansion_level_nq"]
 
     return df_join
+
+
+def load_ml_model(symbol):
+    # load model
+    # try:
+    filepath_ml_model = os.path.join("ml_models", f"{symbol.lower()}_{session_dict.get(session)}_simple_confirmation_bias_model.pickle")
+    filepath_ml_scaler = os.path.join("ml_models", f"{symbol.lower()}_{session_dict.get(session)}_simple_confirmation_bias_scaler.pickle")
+
+    try:
+        loaded_model = pickle.load(open(filepath_ml_model, "rb"))
+        loaded_scaler = pickle.load(open(filepath_ml_scaler, "rb"))
+
+    except FileNotFoundError:
+        return 0 ,f"No trained model for {symbol} available"
+
+    return loaded_model, loaded_scaler
 
 with general_tab:
 
@@ -355,7 +376,6 @@ with distribution_tab:
         with tab_data:
             st.dataframe(df2)
 
-
 with scenario_manager:
     ny_time = datetime.now(pytz.timezone('America/New_York'))
     col_1, col_2 = st.columns(2)
@@ -500,6 +520,59 @@ with scenario_manager:
         st.plotly_chart(fig, use_container_width=True)
 
     st.write(f"Subset of :red[{len(df_sub)}] datapoints are used for this scenario.")
+
+with ml:
+    st.write("This section is still in the very early stages of testing and should never be used as a reference. It should rather be seen as a technical gimmick. ")
+    st.divider()
+    if greenbox == "All":
+        st.error("Please select a greenbox status. It´s an important feature of the ML prediction.")
+    open_level = st.selectbox("What is the level of the DR Box opening price?", [i / 10 for i in range(11)])
+    close_level = st.selectbox("What is the level of the DR Box closing price?", [i / 10 for i in range(11)])
+    # gbox = [1 if greenbox == "True" else 0]
+    # st.write(gbox[0])
+    pred_values = [[1 if greenbox == "True" else 0][0], open_level, close_level]
+
+    model, scaler = load_ml_model(symbol)
+    if model == 0:
+        st.subheader(scaler)
+    else:
+
+        pred_values = scaler.transform([pred_values])
+
+        y_predicted = model.predict(pred_values)
+        st.divider()
+        if y_predicted[0] == 0:
+            st.subheader("The machine learning model predicts a :red[short] confirmation for this session!")
+        else:
+            st.subheader("The machine learning model predicts a :red[long] confirmation for this session!")
+
+
+with strategy:
+    st.subheader("Understanding the Opening Range Strategy")
+    st.write(f"The Opening Range strategy centers around the initial price movements that occur during the first hour of market open. This period, known as the \"opening range\", sets the tone for the trading session. "
+             f"But why is the open of a trading session so important? The open often establishes the trend and sentiment for the day! More often than not, the open is near the high or low of the day. ")
+    st.write("Here's a short breakdown of the strategy.")
+    st.write("**1. Establishing the Opening Range:**")
+    st.write("Traders begin by defining the opening range, spanning the first hour of trading. This range is determined by identifying the high and low prices during this initial timeframe.")
+    st.write("**2. Breakout Identifying:**")
+    st.write("Once the opening range is established, traders waits for a 5 minute close above the high of the range for long trades or below the low of the range for short trades. These breakout levels are called \"confirmation\" as they serve as a directional bias for a possible position.")
+    st.write("**3. Entry Techniques**")
+    st.write("There are different entry techniques. Usually traders enter the market once the price breaks above the high of the opening range (for long trades) or below the low of the opening range (for short trades). "
+             "The aim of this side it to give you a deeper understanding of the historical price movements in terms of time and price levels. Therefore traders can also wait for a retracement into the dr range after price broke out on one side of the range and confirmed our directional bias. "
+             "The distribution of retracement levels can provide information on where good entry levels have been in the past. "
+             "The same applies to the stop price. If possible, this should be in an area where most retracements have already ended in the past. ")
+    st.write("**4. Profit Target:**")
+    st.write("Just as with the entry technique, there are also different ways of determing profit targets. For instance they can be set based on factors such as support and resistance levels or Fibonacci extensions. "
+             "This page aims to show you the distribution of expansion Fibonacci levels achieved in the past to make it easier to set targets.")
+
+    st.divider()
+    st.subheader("Additonal links for further information on this topic:")
+    link1 = "https://www.warriortrading.com/opening-range-breakout/"
+    st.write("Warrior Trading: [Opening Range Breakout Trading Strategy](%s)" % link1)
+    link2 = "https://adamhgrimes.com/wild-things-open/"
+    st.write("Adam H Grimes [Where the wild things are? No, where the open is.](%s)" % link2)
+    link3 = "https://www.youtube.com/channel/UCNSlBUliRfjOxmGB0mZ9_Ag"
+    st.write("TheMas7er [Youtube Channel](%s)" % link3)
 
 with faq_tab:
 
