@@ -11,7 +11,7 @@ from sklearn.ensemble import RandomForestClassifier
 import pickle
 
 
-st.set_page_config(page_title="Range Breakout Analytics Dashboard", layout="wide")
+st.set_page_config(page_title="Opening Range Breakout Analytics", layout="wide")
 
 @st.cache_data
 
@@ -115,7 +115,7 @@ st.write("Do you want to narrow down your data further?")
 col1, col2 = st.columns(2)
 
 with col1:
-    dr_side = st.radio("DR Confirmation side", ("All", "Long", "Short"))
+    dr_side = st.radio("Range confirmation side", ("All", "Long", "Short"))
     if dr_side == "Long":
         df = df[df.dr_upday == True]
     elif dr_side == "Short":
@@ -231,22 +231,22 @@ with general_tab:
     with col1:
         count_dr_confirmed = len(df[df['dr_confirmed']])
         confirmed_dr = count_dr_confirmed / data_points
-        st.metric("DR is confirmed", f"{confirmed_dr:.1%}")
+        st.metric("Range is confirmed", f"{confirmed_dr:.1%}")
 
     with col2:
         count_dr_true = len(df[df['dr_true']])
         dr_true = count_dr_true / data_points
-        st.metric("DR rule holds True", f"{dr_true:.1%}")
+        st.metric("Opposite Range holds", f"{dr_true:.1%}")
 
     with col3:
         count_dr_long = len(df[df['dr_upday']])
         dr_conf_long = count_dr_long / data_points
         if dr_side == "All":
-            st.metric("Long DR days", f"{dr_conf_long:.1%}")
+            st.metric("Long confirmation days", f"{dr_conf_long:.1%}")
         elif dr_side == "Long":
-            st.metric("Long DR days", f"{1:.0%}")
+            st.metric("Long confirmation days", f"{1:.0%}")
         else:
-            st.metric("Long DR days", f"{0:.0%}")
+            st.metric("Long confirmation days", f"{0:.0%}")
 
     with col4:
 
@@ -254,13 +254,13 @@ with general_tab:
 
             breach_count = len(df[df['breached_dr_low']])
             breach_pct = 1 - (breach_count / data_points)
-            st.metric("DR low unbreached", f"{breach_pct:.1%}",
+            st.metric("Range low unbreached", f"{breach_pct:.1%}",
                       help="% of days where price doesn´t wicks below DR low")
 
         elif dr_side == "Short":
             breach_count = len(df[df['breached_dr_high']])
             breach_pct = 1 - (breach_count / data_points)
-            st.metric("DR high unbreached", f"{breach_pct:.1%}",
+            st.metric("Range high unbreached", f"{breach_pct:.1%}",
                       help="% of days where price doesn´t wicks above DR high")
 
         else:
@@ -271,20 +271,20 @@ with general_tab:
     with col5:
         count_days_with_retracement = len(df[df['retrace_into_dr']])
         dr_retracement = count_days_with_retracement / data_points
-        st.metric("Retracement days into DR", f"{dr_retracement:.1%}",
-                  help="% of days with retracement into DR range before the high/low of the day happens")
+        st.metric("Retracement days into Range", f"{dr_retracement:.1%}",
+                  help="% of days with retracement into opening range before the high/low of the day happens")
 
     with col6:
         count_days_with_retracement_idr = len(df[df['retrace_into_idr']])
         idr_retracement = count_days_with_retracement_idr / data_points
-        st.metric("Retracement days into iDR", f"{idr_retracement:.1%}",
-                  help="% of days with retracement into iDR range before the high/low of the day happens")
+        st.metric("Retracement days into iRange", f"{idr_retracement:.1%}",
+                  help="% of days with retracement into the implied opening range (candle bodies) before the high/low of the day happens")
 
     with col7:
         count_dr_winning = len(df[df.close_outside_dr])
         dr_winning_days = count_dr_winning / data_points
-        st.metric("Price closes outside DR", f"{dr_winning_days:.1%}",
-                  help="In direction of DR confirmation")
+        st.metric("Price closes outside opening range", f"{dr_winning_days:.1%}",
+                  help="In direction of opening range confirmation")
 
     with col8:
         st.empty()
@@ -317,7 +317,7 @@ with distribution_tab:
 
     #if breakout or (not expansion and not retracement and not breakout):
     if breakout:
-        st.write("**Distribution of DR confirmation**")
+        st.write("**Distribution of opening range confirmation**")
         st.bar_chart(create_plot_df(df, "breakout_window"), y="pct")
 
     elif retracement:
@@ -340,7 +340,7 @@ with distribution_tab:
                 st.caption(
                     "The :red[red] line is the cumulative sum of the individual probabilities. It shows how many retracements/expansions have already ended at the corresponding level in the past.")
                 st.caption(
-                    "Level :red[0] is the low of the DR range and level :red[1] is the high of the DR range (wicks).")
+                    "Level :red[0] is the low of the opening range and level :red[1] is the high of the opening range (wicks).")
             st.divider()
             st.write("**Distribution of max retracement time before high/low of the session**")
             st.bar_chart(df.groupby("max_retracement_time").agg({"max_retracement_value": "count"}), use_container_width=True)
@@ -368,7 +368,7 @@ with distribution_tab:
                 st.caption(
                     "The :red[red] line is the cumulative sum of the individual probabilities. It shows how many retracements/expansions have already ended at the corresponding level in the past.")
                 st.caption(
-                    "Level :red[0] is the low of the DR range and level :red[1] is the high of the DR range (wicks).")
+                    "Level :red[0] is the low of the opening range and level :red[1] is the high of the opening range (wicks).")
             st.divider()
 
             st.write("**Distribution of max expansion time before high/low of the session**")
@@ -381,7 +381,7 @@ with scenario_manager:
     col_1, col_2 = st.columns(2)
 
     with col_1:
-        dr_conf = st.checkbox("DR Confirmation", value=True)
+        dr_conf = st.checkbox("Opening Range Confirmation", value=True)
 
     with col_2:
         time_mode = st.checkbox("Consider time as filter option")
@@ -390,7 +390,7 @@ with scenario_manager:
     #Confirmation Scenario
     if dr_conf:
         if dr_side == "All":
-            st.error("Please select DR confirmation side for useful results!")
+            st.error("Please select opening range confirmation side for useful results!")
 
         with col9:
             cur_rt_lvl = round(st.number_input("What is your current level of retracement?", value=0.5, step=0.1,
@@ -445,7 +445,7 @@ with scenario_manager:
         if dr_conf:
             count_dr_true_sub = len(df_sub[df_sub['dr_true']])
             dr_true_sub = count_dr_true_sub / sub_data_points
-            st.metric("Probability that DR rule holds True", f"{dr_true_sub:.1%}")
+            st.metric("Probability that opening range rule holds True", f"{dr_true_sub:.1%}")
         else:
             count_dr_up_sub = len(df_sub[df_sub['dr_upday']])
             st.metric("Probability of Long confirmation", f"{count_dr_up_sub/ sub_data_points:.1%}")
@@ -454,8 +454,8 @@ with scenario_manager:
         if dr_conf:
             count_close_outside_dr = len(df_sub[df_sub.close_outside_dr])
             dr_winning_days_sub = count_close_outside_dr / sub_data_points
-            st.metric("Probability that price closes outside DR", f"{dr_winning_days_sub:.1%}",
-                      help="In direction of DR confirmation")
+            st.metric("Price closes outside opening range", f"{dr_winning_days_sub:.1%}",
+                      help="In direction of opening range confirmation")
 
         else:
            # count_dr_up_sub = len(df_sub[df_sub['dr_upday']])
@@ -482,14 +482,14 @@ with scenario_manager:
 
             breach_count = len(df_sub[df_sub['breached_dr_low']])
             breach_pct = 1 - (breach_count / sub_data_points)
-            st.metric("DR low unbreached", f"{breach_pct:.1%}",
+            st.metric("Opening range low unbreached", f"{breach_pct:.1%}",
                       help="% of days where price doesn´t wicks below DR low")
 
         elif dr_side == "Short":
             breach_count = len(df_sub[df_sub['breached_dr_high']])
             breach_pct = 1 - (breach_count / sub_data_points)
-            st.metric("DR high unbreached", f"{breach_pct:.1%}",
-                      help="% of days where price doesn´t wicks above DR high")
+            st.metric("opening range high unbreached", f"{breach_pct:.1%}",
+                      help="% of days where price doesn´t wicks above opening range high")
 
         else:
             st.empty()
@@ -526,8 +526,8 @@ with ml:
     st.divider()
     if greenbox == "All":
         st.error("Please select a greenbox status. It´s an important feature of the ML prediction.")
-    open_level = st.selectbox("What is the level of the DR Box opening price?", [i / 10 for i in range(11)])
-    close_level = st.selectbox("What is the level of the DR Box closing price?", [i / 10 for i in range(11)])
+    open_level = st.selectbox("What is the price level of the opening price?", [i / 10 for i in range(11)])
+    close_level = st.selectbox("What is the price level of the closing price?", [i / 10 for i in range(11)])
     # gbox = [1 if greenbox == "True" else 0]
     # st.write(gbox[0])
     pred_values = [[1 if greenbox == "True" else 0][0], open_level, close_level]
@@ -576,21 +576,21 @@ with strategy:
 
 with faq_tab:
 
-    dr = st.expander("What does DR/IDR stand for?")
-    dr.write("DR stands for defining range and refers to the price range that the price covers within the first hour of trading after the stock exchange opens.")
-    dr.write("IDR stands for implied defining range (body close/open high/lows) and refers to the price range that the price covers within the first hour of trading after the stock exchange opens.")
+    dr = st.expander("What does opening Range /iRange stand for?")
+    dr.write("Opening Range refers to the price range that the price covers within the first hour of trading after the stock exchange opens.")
+    dr.write("iRange stands for implied range and refers to the price range that the candle bodies covers within the first hour of trading after the stock exchange opens.")
 
-    dr_confirmation = st.expander("What is a DR confirmation (Long/Short)")
-    dr_confirmation.write("A DR confirmation refers to the closing of a 5-minute candle above or below the DR high / DR low price level. A close above the DR high is a long confirmation and a close below the DR low level is a short confirmation. ")
+    dr_confirmation = st.expander("What is a range confirmation (Long/Short)")
+    dr_confirmation.write("A Range confirmation refers to the closing of a 5-minute candle above or below the opening range high/low. A close above the opening range high is a long confirmation and a close below the opening price range low level is a short confirmation. ")
 
-    dr_rule = st.expander("What is the DR Rule?")
-    dr_rule.write("The DR Rule states that it is very unlikely that the price will close below/above the other side of the DR Range after it has confirmed one side. "
+    dr_rule = st.expander("What is the opening range rule?")
+    dr_rule.write("The Rule states that it is very unlikely that the price will close below/above the other side of the opening range after it has confirmed one side. "
                   "The historical percentages for this can be found in this dashboard.")
 
     dr_rule.write("No trading recommendation can be derived from this. Please read the disclaimer very carefully.")
 
     greenbox_rule = st.expander("What is a greenbox?")
-    greenbox_rule.write("The greenbox is defined by the opening price and the closing price of the DR range. If the closing price is quoted above the opening price, then the DR range is a green box.")
+    greenbox_rule.write("The greenbox is defined by the opening price and the closing price of the opening hour. If the closing price is quoted above the opening price, then the opening range is a greenbox.")
 
     indicator = st.expander("Is there a good TradingView indicator?")
     indicator.write("I personally like the TheMas7er scalp (US equity) 5min [promuckaj] indicator. It comes with a lot of features but there are plenty of other free indicators available")
