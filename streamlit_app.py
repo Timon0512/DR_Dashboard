@@ -72,6 +72,7 @@ with st.sidebar:
         "Choose your Symbol?",
         symbol_dict.keys()
     )
+
     session_dict = {"New York (9:30 - 16:00 EST)": "dr", "London (3:00 - 8:30 EST)": "odr"}
     session = st.radio("Choose your Session",
                         ["New York (9:30 - 16:00 EST)", "London (3:00 - 8:30 EST)"])
@@ -291,7 +292,7 @@ with general_tab:
 
 with distribution_tab:
 
-    col3, col4, col5 = st.columns(3)
+    col3, col4, col5, close_dis = st.columns(4)
 
     with col3:
         median_time = median_time_calcualtion(df["breakout_time"])
@@ -306,6 +307,7 @@ with distribution_tab:
                   delta_color="inverse")
         retracement = st.button("See Distribution", key="retracement")
 
+
     with col5:
 
         median_expansion = median_time_calcualtion(df["max_expansion_time"])
@@ -315,7 +317,12 @@ with distribution_tab:
         expansion = st.button("See distribution", key="expansion_time")
 
 
-    #if breakout or (not expansion and not retracement and not breakout):
+    with close_dis:
+
+        st.metric("Median price level at end of the session:", value=str(df.session_close_level.median()),
+                  delta=f"Mode closing price level: {df.session_close_level.mode()[0]}")
+        close_distribution = st.button("See distribution", key="close_dis")
+
     if breakout:
         st.write("**Distribution of opening range confirmation**")
         st.bar_chart(create_plot_df(df, "breakout_window"), y="pct")
@@ -336,10 +343,10 @@ with distribution_tab:
                 fig = create_plotly_plot(df2, "Distribution of max retracement before high/low of the session", "Retracement Level", reversed_x_axis=True)
             st.plotly_chart(fig, use_container_width=True)
 
-            if not breakout:
-                st.caption(
+
+            st.caption(
                     "The :red[red] line is the cumulative sum of the individual probabilities. It shows how many retracements/expansions have already ended at the corresponding level in the past.")
-                st.caption(
+            st.caption(
                     "Level :red[0] is the low of the opening range and level :red[1] is the high of the opening range (wicks).")
             st.divider()
             st.write("**Distribution of max retracement time before high/low of the session**")
@@ -364,10 +371,9 @@ with distribution_tab:
                 fig = create_plotly_plot(df2, "Distribution of max expansion before high/low of the session", "Expansion Level", reversed_x_axis=False)
             st.plotly_chart(fig, use_container_width=True)
 
-            if not breakout:
-                st.caption(
+            st.caption(
                     "The :red[red] line is the cumulative sum of the individual probabilities. It shows how many retracements/expansions have already ended at the corresponding level in the past.")
-                st.caption(
+            st.caption(
                     "Level :red[0] is the low of the opening range and level :red[1] is the high of the opening range (wicks).")
             st.divider()
 
@@ -375,6 +381,26 @@ with distribution_tab:
             st.bar_chart(df.groupby("max_expansion_time").agg({"max_expansion_value": "count"}), use_container_width=True)
         with tab_data:
             st.dataframe(df2)
+
+    elif close_distribution:
+
+        if dr_side == "Short":
+            df2 = create_plot_df(df, "session_close_level", inverse_percentile=True, ascending=False)
+        else:
+            df2 = create_plot_df(df, "session_close_level", inverse_percentile=False)
+
+        tab_chart, tab_data = st.tabs(["📈 Chart", "🗃 Data"])
+
+        with tab_chart:
+            if dr_side == "Short":
+                fig = create_plotly_plot(df2, "Distribution of Session Closing Price", "Session Closing Price Level", reversed_x_axis=True)
+            else:
+                fig = create_plotly_plot(df2, "Distribution of Session Closing Price", "Distribution of session closing price", "Session Closing Price Level", reversed_x_axis=False)
+            st.plotly_chart(fig, use_container_width=True)
+
+        with tab_data:
+            st.dataframe(df2)
+
 
 with scenario_manager:
     ny_time = datetime.now(pytz.timezone('America/New_York'))
