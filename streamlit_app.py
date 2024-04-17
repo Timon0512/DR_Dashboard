@@ -14,7 +14,6 @@ import pickle
 st.set_page_config(page_title="Opening Range Breakout Analytics", layout="wide")
 
 @st.cache_data
-
 def load_data(file_path):
     df = pd.read_csv(file_path, sep=";", index_col=0, parse_dates=True)
     return df
@@ -54,6 +53,89 @@ def median_time_calcualtion(time_array):
     median_time = seconds_to_time(median_seconds)
 
     return median_time
+
+
+def create_plot_df(df, groupby_column, inverse_percentile=False, ascending=True):
+    plot_df = df.groupby(groupby_column).agg({"breakout_window": "count"})
+    plot_df = plot_df.rename(columns={"breakout_window": "count"})
+    plot_df["pct"] = plot_df["count"] / plot_df["count"].sum()
+    plot_df["percentile"] = plot_df["pct"].cumsum()
+
+    if inverse_percentile:
+        plot_df["percentile"] = 1- plot_df["percentile"]
+
+    if not ascending:
+        plot_df = plot_df.sort_index(ascending=False)
+    return plot_df
+
+
+def create_plotly_plot(df, title, x_title, y1_name="Pct", y2_name="Overall likelihood", y1="pct", y2="percentile",
+                       line_color="red", reversed_x_axis=False):
+    subfig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    fig1 = px.bar(df, x=df.index, y=y1)
+    fig2 = px.line(df, x=df.index, y=y2, color_discrete_sequence=[line_color])
+
+    fig2.update_traces(yaxis="y2")
+    subfig.add_traces(fig1.data + fig2.data)
+
+    subfig.layout.xaxis.title = x_title
+    subfig.layout.yaxis.title = y1_name
+    subfig.layout.yaxis2.title = y2_name
+    subfig.layout.title = title
+    subfig.layout.yaxis2.showgrid = False
+
+    if reversed_x_axis:
+        subfig.update_layout(
+            xaxis=dict(autorange="reversed")
+        )
+
+    return subfig
+
+def create_join_table(first_symbol, second_symbol):
+
+    cols_to_use = ["date", "greenbox", "breakout_time", "dr_upday", "max_retracement_time", "max_expansion_time", "retracement_level", "expansion_level", "closing_level"]
+
+    first_symbol = first_symbol.lower()
+    second_symbol = second_symbol.lower()
+
+    file1 = os.path.join("dr_data", f"{first_symbol}_{session.lower()}.csv")
+    file2 = os.path.join("dr_data", f"{second_symbol}_{session.lower()}.csv")
+
+    if first_symbol == second_symbol:
+        pass
+
+    df1 = pd.read_csv(file1, sep=";", index_col=[0], usecols=cols_to_use)
+    df2 = pd.read_csv(file2, sep=";", index_col=[0], usecols=cols_to_use)
+
+    df_join = df1.join(df2, lsuffix=f"_{first_symbol}", rsuffix=f"_{second_symbol}", how="left")
+
+
+
+    # df[f"breakout_time_{first_symbol}"] = pd.to_datetime(df[f"breakout_time_{first_symbol}"], format="%H:%M:%S")
+    # df[f"breakout_time_{second_symbol}"] = pd.to_datetime(df[f"breakout_time_{second_symbol}"], format="%H:%M:%S")
+
+    # df["breakout_dif"] = (df[f"breakout_time_{second_symbol}"] - df[f"breakout_time_{first_symbol}"]).dt.total_seconds()/60
+    # df["retracement_dif"] = df[f"retracement_level_es"] - df["retracement_level_nq"]
+    # df["expansion_dif"] = df["expansion_level_es"] - df["expansion_level_nq"]
+
+    return df_join
+
+
+def load_ml_model(symbol):
+    # load model
+    # try:
+    filepath_ml_model = os.path.join("ml_models", f"{symbol.lower()}_{session_dict.get(session)}_simple_confirmation_bias_model.pickle")
+    filepath_ml_scaler = os.path.join("ml_models", f"{symbol.lower()}_{session_dict.get(session)}_simple_confirmation_bias_scaler.pickle")
+
+    try:
+        loaded_model = pickle.load(open(filepath_ml_model, "rb"))
+        loaded_scaler = pickle.load(open(filepath_ml_scaler, "rb"))
+
+    except FileNotFoundError:
+        return 0 ,f"No trained model for {symbol} available"
+
+    return loaded_model, loaded_scaler
 
 
 with st.sidebar:
@@ -140,90 +222,8 @@ df = df[df.breakout_window.isin(confirmation_time)]
 data_points = len(df.index)
 inv_param = [False if dr_side == "Long" else True][0]
 
-general_tab, distribution_tab, scenario_manager, strategy ,faq_tab, disclaimer, ml= st.tabs(["General Statistics", "Distribution", "Scenario Manager", "The Strategy", "FAQ", "Disclaimer", "Machine Learning"])
-
-
-def create_plot_df(df, groupby_column, inverse_percentile=False, ascending=True):
-    plot_df = df.groupby(groupby_column).agg({"breakout_window": "count"})
-    plot_df = plot_df.rename(columns={"breakout_window": "count"})
-    plot_df["pct"] = plot_df["count"] / plot_df["count"].sum()
-    plot_df["percentile"] = plot_df["pct"].cumsum()
-
-    if inverse_percentile:
-        plot_df["percentile"] = 1- plot_df["percentile"]
-
-    if not ascending:
-        plot_df = plot_df.sort_index(ascending=False)
-    return plot_df
-
-
-def create_plotly_plot(df, title, x_title, y1_name="Pct", y2_name="Overall likelihood", y1="pct", y2="percentile",
-                       line_color="red", reversed_x_axis=False):
-    subfig = make_subplots(specs=[[{"secondary_y": True}]])
-
-    fig1 = px.bar(df, x=df.index, y=y1)
-    fig2 = px.line(df, x=df.index, y=y2, color_discrete_sequence=[line_color])
-
-    fig2.update_traces(yaxis="y2")
-    subfig.add_traces(fig1.data + fig2.data)
-
-    subfig.layout.xaxis.title = x_title
-    subfig.layout.yaxis.title = y1_name
-    subfig.layout.yaxis2.title = y2_name
-    subfig.layout.title = title
-    subfig.layout.yaxis2.showgrid = False
-
-    if reversed_x_axis:
-        subfig.update_layout(
-            xaxis=dict(autorange="reversed")
-        )
-
-    return subfig
-
-def create_join_table(first_symbol, second_symbol):
-
-    cols_to_use = ["date", "greenbox", "breakout_time", "dr_upday", "max_retracement_time", "max_expansion_time", "retracement_level", "expansion_level", "closing_level"]
-
-    first_symbol = first_symbol.lower()
-    second_symbol = second_symbol.lower()
-
-    file1 = os.path.join("dr_data", f"{first_symbol}_{session.lower()}.csv")
-    file2 = os.path.join("dr_data", f"{second_symbol}_{session.lower()}.csv")
-
-    if first_symbol == second_symbol:
-        pass
-
-    df1 = pd.read_csv(file1, sep=";", index_col=[0], usecols=cols_to_use)
-    df2 = pd.read_csv(file2, sep=";", index_col=[0], usecols=cols_to_use)
-
-    df_join = df1.join(df2, lsuffix=f"_{first_symbol}", rsuffix=f"_{second_symbol}", how="left")
-
-
-
-    # df[f"breakout_time_{first_symbol}"] = pd.to_datetime(df[f"breakout_time_{first_symbol}"], format="%H:%M:%S")
-    # df[f"breakout_time_{second_symbol}"] = pd.to_datetime(df[f"breakout_time_{second_symbol}"], format="%H:%M:%S")
-
-    # df["breakout_dif"] = (df[f"breakout_time_{second_symbol}"] - df[f"breakout_time_{first_symbol}"]).dt.total_seconds()/60
-    # df["retracement_dif"] = df[f"retracement_level_es"] - df["retracement_level_nq"]
-    # df["expansion_dif"] = df["expansion_level_es"] - df["expansion_level_nq"]
-
-    return df_join
-
-
-def load_ml_model(symbol):
-    # load model
-    # try:
-    filepath_ml_model = os.path.join("ml_models", f"{symbol.lower()}_{session_dict.get(session)}_simple_confirmation_bias_model.pickle")
-    filepath_ml_scaler = os.path.join("ml_models", f"{symbol.lower()}_{session_dict.get(session)}_simple_confirmation_bias_scaler.pickle")
-
-    try:
-        loaded_model = pickle.load(open(filepath_ml_model, "rb"))
-        loaded_scaler = pickle.load(open(filepath_ml_scaler, "rb"))
-
-    except FileNotFoundError:
-        return 0 ,f"No trained model for {symbol} available"
-
-    return loaded_model, loaded_scaler
+general_tab, distribution_tab, strategy_tester, retracement_manager, strategy_rules, faq_tab, disclaimer, ml = \
+    st.tabs(["General Statistics", "Distribution", "Stategy Backtester", "Retracement Manager", "Strategy Rules", "FAQ", "Disclaimer", "Machine Learning"])
 
 with general_tab:
 
@@ -237,9 +237,30 @@ with general_tab:
     with col2:
         count_dr_true = len(df[df['dr_true']])
         dr_true = count_dr_true / data_points
-        st.metric("Opposite Range holds", f"{dr_true:.1%}")
+        st.metric("Opposite Range holds", f"{dr_true:.1%}",
+                  help="No candle close below/above the opposite side of the confirmed range.")
+
 
     with col3:
+        count_days_with_retracement = len(df[df['retrace_into_dr']])
+        dr_retracement = count_days_with_retracement / data_points
+        st.metric("Retracement days into Range", f"{dr_retracement:.1%}",
+                  help="% of days with retracement into opening range before the high/low of the day happens")
+
+
+    with col4:
+
+
+        count_dr_winning = len(df[df.close_outside_dr])
+        dr_winning_days = count_dr_winning / data_points
+        st.metric("Price closes outside opening range", f"{dr_winning_days:.1%}",
+                  help="In direction of opening range confirmation")
+
+
+
+    col5, col6, col7, col8 = st.columns(4)
+
+    with col5:
         count_dr_long = len(df[df['dr_upday']])
         dr_conf_long = count_dr_long / data_points
         if dr_side == "All":
@@ -249,43 +270,30 @@ with general_tab:
         else:
             st.metric("Long confirmation days", f"{0:.0%}")
 
-    with col4:
+
+
+    with col6:
 
         if dr_side == "Long":
 
             breach_count = len(df[df['breached_dr_low']])
             breach_pct = 1 - (breach_count / data_points)
             st.metric("Range low unbreached", f"{breach_pct:.1%}",
-                      help="% of days where price doesn´t wicks below DR low")
+                      help="% of days where price doesn´t wicks below Range low")
 
         elif dr_side == "Short":
             breach_count = len(df[df['breached_dr_high']])
             breach_pct = 1 - (breach_count / data_points)
             st.metric("Range high unbreached", f"{breach_pct:.1%}",
-                      help="% of days where price doesn´t wicks above DR high")
+                      help="% of days where price doesn´t wicks above Range high")
 
         else:
             st.empty()
-
-    col5, col6, col7, col8 = st.columns(4)
-
-    with col5:
-        count_days_with_retracement = len(df[df['retrace_into_dr']])
-        dr_retracement = count_days_with_retracement / data_points
-        st.metric("Retracement days into Range", f"{dr_retracement:.1%}",
-                  help="% of days with retracement into opening range before the high/low of the day happens")
-
-    with col6:
+    with col7:
         count_days_with_retracement_idr = len(df[df['retrace_into_idr']])
         idr_retracement = count_days_with_retracement_idr / data_points
         st.metric("Retracement days into iRange", f"{idr_retracement:.1%}",
                   help="% of days with retracement into the implied opening range (candle bodies) before the high/low of the day happens")
-
-    with col7:
-        count_dr_winning = len(df[df.close_outside_dr])
-        dr_winning_days = count_dr_winning / data_points
-        st.metric("Price closes outside opening range", f"{dr_winning_days:.1%}",
-                  help="In direction of opening range confirmation")
 
     with col8:
         st.empty()
@@ -297,8 +305,10 @@ with distribution_tab:
     with col3:
         median_time = median_time_calcualtion(df["breakout_time"])
         # median_time = statistics.median(df2["breakout_time"])
-        st.metric("Median confirmation time:", value=str(median_time))
-        breakout = st.button("See Confirmation Distribution", key="breakout")
+        st.metric("Median confirmation time:", value=str(median_time),
+                  delta=f"Mode breakout time: {df.breakout_time.mode()[0]}")
+        breakout = st.button("See Distribution", key="breakout")
+
 
     with col4:
         median_retracement = median_time_calcualtion(df["max_retracement_time"])
@@ -316,12 +326,6 @@ with distribution_tab:
                   )
         expansion = st.button("See distribution", key="expansion_time")
 
-
-    with close_dis:
-
-        st.metric("Median price level at end of the session:", value=str(df.session_close_level.median()),
-                  delta=f"Mode closing price level: {df.session_close_level.mode()[0]}")
-        close_distribution = st.button("See distribution", key="close_dis")
 
     if breakout:
         st.write("**Distribution of opening range confirmation**")
@@ -366,9 +370,9 @@ with distribution_tab:
 
         with tab_chart:
             if dr_side == "Short":
-                fig = create_plotly_plot(df2, "Distribution of max expansion before high/low of the session", "Expansion Level", reversed_x_axis=True)
+                fig = create_plotly_plot(df2, "Distribution of max expansion", "Expansion Level", reversed_x_axis=True)
             else:
-                fig = create_plotly_plot(df2, "Distribution of max expansion before high/low of the session", "Expansion Level", reversed_x_axis=False)
+                fig = create_plotly_plot(df2, "Distribution of max expansion", "Expansion Level", reversed_x_axis=False)
             st.plotly_chart(fig, use_container_width=True)
 
             st.caption(
@@ -377,133 +381,51 @@ with distribution_tab:
                     "Level :red[0] is the low of the opening range and level :red[1] is the high of the opening range (wicks).")
             st.divider()
 
-            st.write("**Distribution of max expansion time before high/low of the session**")
+            st.write("**Distribution of max expansion time**")
             st.bar_chart(df.groupby("max_expansion_time").agg({"max_expansion_value": "count"}), use_container_width=True)
         with tab_data:
             st.dataframe(df2)
 
-    elif close_distribution:
-
-        if dr_side == "Short":
-            df2 = create_plot_df(df, "session_close_level", inverse_percentile=True, ascending=False)
-        else:
-            df2 = create_plot_df(df, "session_close_level", inverse_percentile=False)
-
-        tab_chart, tab_data = st.tabs(["📈 Chart", "🗃 Data"])
-
-        with tab_chart:
-            if dr_side == "Short":
-                fig = create_plotly_plot(df2, "Distribution of Session Closing Price", "Session Closing Price Level", reversed_x_axis=True)
-            else:
-                fig = create_plotly_plot(df2, "Distribution of Session Closing Price", "Distribution of session closing price", "Session Closing Price Level", reversed_x_axis=False)
-            st.plotly_chart(fig, use_container_width=True)
-
-        with tab_data:
-            st.dataframe(df2)
-
-
-with scenario_manager:
+with retracement_manager:
     ny_time = datetime.now(pytz.timezone('America/New_York'))
     col_1, col_2 = st.columns(2)
 
-    with col_1:
-        dr_conf = st.checkbox("Opening Range Confirmation", value=True)
-
-    with col_2:
-        time_mode = st.checkbox("Consider time as filter option")
 
     col9, col10, col11 = st.columns(3)
-    #Confirmation Scenario
-    if dr_conf:
-        if dr_side == "All":
-            st.error("Please select opening range confirmation side for useful results!")
 
-        with col9:
-            cur_rt_lvl = round(st.number_input("What is your current level of retracement?", value=0.5, step=0.1,
-                                               help="Deselects datapoints that show a less strong retracenent"), 2)
-            if dr_side == "Long":
-                df_sub = df[df.retracement_level <= cur_rt_lvl]
-            else:
-                df_sub = df[df.retracement_level >= cur_rt_lvl]
+    if dr_side == "All":
+        st.error("Please select opening range confirmation side for useful results!")
 
-        with col10:
+    with col9:
+        cur_rt_lvl = round(st.number_input("What is your current level of retracement?", value=0.5, step=0.1,
+                                            help="Deselects datapoints that show a less strong retracenent"), 2)
+        if dr_side == "Long":
+            df_sub = df[df.session_low_level <= cur_rt_lvl]
+        else:
+            df_sub = df[df.session_high_level >= cur_rt_lvl]
 
-            if time_mode:
-
-                cur_time = st.time_input("Deselect max retracement times before:" , value=ny_time,
-                                         help="Deselects datapoints where the maximum of retracement already happend")
-
-                df_sub['max_retracement_time'] = pd.to_datetime(df_sub['max_retracement_time'], format='%H:%M:%S').dt.time
-
-                df_sub = df_sub[df_sub.max_retracement_time >= cur_time]
-            else:
-                st.empty()
-        with col11:
-            st.empty()
-
-    # Scenario before Confirmation
-    else:
-        df_sub = df
-        if (dr_side != "All") or (greenbox == "All"):
-            st.error("Please select confirmation side option \"All\" and a greenbox side for correct results!")
-        if time_mode:
-            col_3, col_4 = st.columns(2)
-            with col_3:
-                cur_time = st.time_input("Deselect with confirmation before:", value=ny_time,
-                                         help="Deselects datapoints where the confirmation already happend")
-
-                df_sub['max_retracement_time'] = pd.to_datetime(df_sub['breakout_time'], format='%H:%M:%S').dt.time
-
-                df_sub = df_sub[df_sub.max_retracement_time >= cur_time]
-            with col_4:
-                st.empty()
-
-
+    with col10:
         st.empty()
+
+    with col11:
+        st.empty()
+
 
     st.divider()
 
-    col12, col13, col14, col15 = st.columns(4)
-
     sub_data_points = len(df_sub.index)
 
+    col12, col13, col14 = st.columns(3)
+
     with col12:
-        if dr_conf:
-            count_dr_true_sub = len(df_sub[df_sub['dr_true']])
-            dr_true_sub = count_dr_true_sub / sub_data_points
-            st.metric("Probability that opening range rule holds True", f"{dr_true_sub:.1%}")
-        else:
-            count_dr_up_sub = len(df_sub[df_sub['dr_upday']])
-            st.metric("Probability of Long confirmation", f"{count_dr_up_sub/ sub_data_points:.1%}")
+
+        count_dr_true_sub = len(df_sub[df_sub['dr_true']].index)
+        dr_true_sub = count_dr_true_sub / sub_data_points
+        st.metric("Probability that opposite range holds", f"{dr_true_sub:.1%}",
+                  help="price does not close above/below opposite range")
 
     with col13:
-        if dr_conf:
-            count_close_outside_dr = len(df_sub[df_sub.close_outside_dr])
-            dr_winning_days_sub = count_close_outside_dr / sub_data_points
-            st.metric("Price closes outside opening range", f"{dr_winning_days_sub:.1%}",
-                      help="In direction of opening range confirmation")
 
-        else:
-           # count_dr_up_sub = len(df_sub[df_sub['dr_upday']])
-            st.metric("Probability of Short confirmation", f"{1 - (count_dr_up_sub/ sub_data_points):.1%}")
-
-    with col14:
-        median_scenario_ret = df_sub.retracement_level.median()
-        median_retracement_sub = median_time_calcualtion(df_sub["max_retracement_time"])
-        st.metric(f"median retracement time for this scenario is", str(median_retracement_sub),
-                  delta=f"Median retracement level: {median_scenario_ret}")
-
-    with col15:
-
-        median_scenario_exp = df_sub.expansion_level.median()
-        median_expansion_sub = median_time_calcualtion(df_sub["max_expansion_time"])
-
-        st.metric(f"median expansion time for this scenario is", str(median_expansion_sub),
-                  delta=f"Median expansion level: {median_scenario_exp}")
-
-    col16, col17 = st.columns(2)
-
-    with col16:
         if dr_side == "Long":
 
             breach_count = len(df_sub[df_sub['breached_dr_low']])
@@ -520,32 +442,183 @@ with scenario_manager:
         else:
             st.empty()
 
+
+    with col14:
+        count_close_outside_dr = len(df_sub[df_sub.close_outside_dr].index)
+        dr_winning_days_sub = count_close_outside_dr / sub_data_points
+        st.metric("Price closes outside opening range", f"{dr_winning_days_sub:.1%}",
+                      help="In direction of opening range confirmation")
+
+
     # Plotting Area
     col_5, col_6 = st.columns(2)
-    if dr_conf:
 
-        with col_5:
-            df2_sub = create_plot_df(df_sub, "retracement_level", inverse_percentile=inv_param)
-            fig = create_plotly_plot(df2_sub, "Distribution of max retracement", "Retracement Level")
+
+    with col_5:
+
+        if dr_side == "Long":
+            df2_sub = create_plot_df(df_sub, "session_low_level")
+            fig = create_plotly_plot(df2_sub, "Distribution of Session lows (retracement)", "Session Low Level")
             st.plotly_chart(fig, use_container_width=True)
-        with col_6:
-            df2_sub = create_plot_df(df_sub, "expansion_level", inverse_percentile=not inv_param)
-            fig = create_plotly_plot(df2_sub, "Distribution of max expansion", "Expansion Level")
+        else:
+            df2_sub = create_plot_df(df_sub, "session_high_level", inverse_percentile=inv_param)
+            fig = create_plotly_plot(df2_sub, "Distribution of Session highs (retracement)", "Session High Level")
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col_6:
+
+        if dr_side == "Long":
+
+            df2_sub = create_plot_df(df_sub, "session_high_level", inverse_percentile=not inv_param)
+            fig = create_plotly_plot(df2_sub, "Distribution of Session highs (expansion)", "Session High Level")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            df2_sub = create_plot_df(df_sub, "session_low_level", inverse_percentile=not inv_param)
+            fig = create_plotly_plot(df2_sub, "Distribution of Session lows (expansion)", "Session Low Level")
             st.plotly_chart(fig, use_container_width=True)
 
 
+
+
+    st.write(f"Subset of :red[{len(df_sub.index)}] datapoints are used for this scenario.")
+
+with strategy_tester:
+    if dr_side == "All":
+        st.error("Please select a confirmation side! Long confirmation assumes long trade and vice versa.")
     else:
-        conf_plot = df_sub.groupby("closing_level").agg(
-            {"dr_upday": "mean", "dr_true": "count"}).rename(
-            columns={"dr_upday": "pct", "dr_true": "count"})
 
-        if greenbox == "False":
-            conf_plot[" "] = 1 - conf_plot["pct"]
+        col_buy_in, col_sl, col_tp = st.columns(3)
+        with col_buy_in:
+            if dr_side == "Short":
+                buy_in = st.number_input("What is your sell in level:", step=0.1, value=0.0)
+            else:
+                buy_in = st.number_input("What is your buy in level:", step=0.1, value=1.0)
+        with col_sl:
+            sl = st.number_input("What is your stop loss level:", step=0.1, value=0.5)
+        with col_tp:
+            if dr_side == "Short":
+                tp = st.number_input("What is your take profit level:", step=0.1, value=-0.5)
+            else:
+                tp = st.number_input("What is your take profit level:", step=0.1, value=1.5)
 
-        fig = px.bar(conf_plot, y='pct', x=conf_plot.index, text='count')
-        st.plotly_chart(fig, use_container_width=True)
+        if dr_side == "Long":
+            # Filter dataframe
+            strat_df = df[df.retracement_level <= buy_in]
+            strat_df = strat_df[["session_high_level", "session_low_level", "session_close_level", "retracement_level", "expansion_level"]]
+            #direct sl trades
+            sl_df = strat_df[(strat_df.retracement_level <= sl)]
+            # SL after high of day
+            sl2_df = strat_df[(strat_df.retracement_level > sl) &
+                              (strat_df.session_low_level <= sl) &
+                              (strat_df.expansion_level < tp)]
 
-    st.write(f"Subset of :red[{len(df_sub)}] datapoints are used for this scenario.")
+            # tp trades
+            tp_df = strat_df[(strat_df.expansion_level >= tp) & (strat_df.retracement_level > sl)]
+
+            # delete sl and tp trades from overall df
+            part_df = strat_df.drop(sl_df.index, axis='index')
+            part_df = part_df.drop(sl2_df.index, axis='index')
+            part_df = part_df.drop(tp_df.index, axis='index')
+
+            #partial wins
+            part_win_df = part_df[part_df.session_close_level >= buy_in]
+            part_loss_df = part_df[part_df.session_close_level < buy_in]
+
+            #calc kpis
+            # win_rate = (part_win_count + tp_count) / trade_count
+            # target_tp = abs(buy_in - tp) / abs(buy_in - sl)
+        else:
+            # Filter dataframe
+            strat_df = df[(df.retracement_level >= buy_in)]
+            strat_df = strat_df[["session_high_level", "session_low_level", "session_close_level", "retracement_level",
+                                 "expansion_level"]]
+
+            # direct sl trades
+            sl_df = strat_df[(strat_df.retracement_level >= sl)]
+            # SL after high of day
+            sl2_df = strat_df[(strat_df.retracement_level < sl) &
+                              (strat_df.session_high_level >= sl) &
+                              (strat_df.expansion_level > tp)]
+
+            # tp trades
+            tp_df = strat_df[(strat_df.expansion_level <= tp) & (strat_df.retracement_level < sl)]
+
+            # delete sl and tp trades from overall df
+            part_df = strat_df.drop(sl_df.index, axis='index')
+            part_df = part_df.drop(sl2_df.index, axis='index')
+            part_df = part_df.drop(tp_df.index, axis='index')
+
+            # partial wins
+            part_win_df = part_df[part_df.session_close_level <= buy_in]
+            part_loss_df = part_df[part_df.session_close_level > buy_in]
+
+            # calc kpis
+        trade_count = len(strat_df.index)
+        sl_count = len(sl_df.index) + len(sl2_df.index)
+        tp_count = len(tp_df.index)
+        part_loss_count = len(part_loss_df.index)
+        part_win_count = len(part_win_df.index)
+
+        win_rate = (part_win_count + tp_count) / trade_count
+        target_tp = abs(buy_in - tp) / abs(buy_in - sl)
+
+
+        trades, hit_tp, hit_sl, part_tp, part_sl = st.columns(5)
+
+        with trades:
+            st.metric("#Trades", trade_count)
+        with hit_tp:
+            st.metric("Take Profit Hits", tp_count)
+        with hit_sl:
+            st.metric("Stop Loss Hits", sl_count)
+        with part_tp:
+            st.metric("Partial Wins", part_win_count)
+        with part_sl:
+            st.metric("Partial Losses", part_loss_count)
+
+        winrate, profit_factor, target_rr, avg_rr, real_r = st.columns(5)
+
+        with winrate:
+            st.metric("Winrate", f"{win_rate:.1%}")
+        with profit_factor:
+            win_r = (tp_count * target_tp) + (abs(part_win_df.session_close_level - buy_in).sum())
+            loss_r = (sl_count + abs(part_loss_df.session_close_level - buy_in).sum())
+
+            profit_fact = win_r / loss_r
+            st.metric("Proft Factor:", f"{profit_fact: .2f}")
+
+        with target_rr:
+            st.metric("Target Risk Multiple", f"{target_tp:.2f}")
+        with avg_rr:
+
+            real_par_rr = (np.array(part_df.session_close_level) - buy_in) / abs(buy_in - sl)
+            avg_risk_reward = ((tp_count * target_tp) + (sl_count * -1) + sum(real_par_rr)) / trade_count
+
+            st.metric("Avg. Realized Risk Multiple", f"{avg_risk_reward: .2f}")
+        with real_r:
+
+            #Equity Curve
+            sl_df["R"] = -1
+            sl2_df["R"] = -1
+            tp_df["R"] = target_tp
+            part_df["R"] = real_par_rr
+
+            #eq_curve = pd.concat([sl_df[["R"]], sl2_df[["R"]],tp_df[["R"]], part_df[["R"]]])
+            eq_curve = pd.concat([sl_df, sl2_df, tp_df, part_df])
+            eq_curve = eq_curve.sort_index(ascending=True)
+            eq_curve["Risk Reward"] = eq_curve.R.cumsum()
+            st.metric("Realized Risk Reward", f"{eq_curve.R.sum(): .2f}")
+
+        st.divider()
+
+        tab_chart, tab_data = st.tabs(["📈 Chart", "🗃 Data"])
+        with tab_chart:
+            st.write("**Equity Curve**")
+            st.line_chart(eq_curve, y="Risk Reward", use_container_width=True)
+
+        with tab_data:
+            eq_curve = eq_curve.drop("Risk Reward", axis=1)
+            st.dataframe(eq_curve)
 
 with ml:
     st.write("This section is still in the very early stages of testing and should never be used as a reference. It should rather be seen as a technical gimmick. ")
@@ -572,8 +645,7 @@ with ml:
         else:
             st.subheader("The machine learning model predicts a :red[long] confirmation for this session!")
 
-
-with strategy:
+with strategy_rules:
     st.subheader("Understanding the Opening Range Strategy")
     st.write(f"The Opening Range strategy centers around the initial price movements that occur during the first hour of market open. This period, known as the \"opening range\", sets the tone for the trading session. "
              f"But why is the open of a trading session so important? The open often establishes the trend and sentiment for the day! More often than not, the open is near the high or low of the day. ")
@@ -657,4 +729,3 @@ start_date = df.index[0].strftime("%Y-%m-%d")
 end_date = df.index[-1].strftime("%Y-%m-%d")
 st.write(f"Statistics based on :red[{len(df)}] data points from :red[{start_date}] to :red[{end_date}]")
 
-#st.write(create_join_table(symbol, "es"))
