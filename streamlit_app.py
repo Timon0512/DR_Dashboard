@@ -342,9 +342,9 @@ with distribution_tab:
 
         with tab_chart:
             if dr_side == "Short":
-                fig = create_plotly_plot(df2, "Distribution of max retracement before high/low of the session", "Retracement Level", reversed_x_axis=False)
+                fig = create_plotly_plot(df2, "Distribution of max retracement before low of the session", "Retracement Level", reversed_x_axis=False)
             else:
-                fig = create_plotly_plot(df2, "Distribution of max retracement before high/low of the session", "Retracement Level", reversed_x_axis=True)
+                fig = create_plotly_plot(df2, "Distribution of max retracement before high of the session", "Retracement Level", reversed_x_axis=True)
             st.plotly_chart(fig, use_container_width=True)
 
 
@@ -355,6 +355,7 @@ with distribution_tab:
             st.divider()
             st.write("**Distribution of max retracement time before high/low of the session**")
             st.bar_chart(df.groupby("max_retracement_time").agg({"max_retracement_value": "count"}), use_container_width=True)
+
 
         with tab_data:
             st.dataframe(df2)
@@ -383,6 +384,9 @@ with distribution_tab:
 
             st.write("**Distribution of max expansion time**")
             st.bar_chart(df.groupby("max_expansion_time").agg({"max_expansion_value": "count"}), use_container_width=True)
+
+            st.write(f"Median max expansion time is: {median_time_calcualtion(df.max_expansion_time)}")
+
         with tab_data:
             st.dataframe(df2)
 
@@ -400,9 +404,9 @@ with retracement_manager:
         cur_rt_lvl = round(st.number_input("What is your current level of retracement?", value=0.5, step=0.1,
                                             help="Deselects datapoints that show a less strong retracenent"), 2)
         if dr_side == "Long":
-            df_sub = df[df.session_low_level <= cur_rt_lvl]
+            df_sub = df[df.after_conf_min_level <= cur_rt_lvl]
         else:
-            df_sub = df[df.session_high_level >= cur_rt_lvl]
+            df_sub = df[df.after_conf_max_level >= cur_rt_lvl]
 
     with col10:
         st.empty()
@@ -503,49 +507,53 @@ with strategy_tester:
 
         if dr_side == "Long":
             # Filter dataframe
-            strat_df = df[df.retracement_level <= buy_in]
-            strat_df = strat_df[["session_high_level", "session_low_level", "session_close_level", "retracement_level", "expansion_level"]]
+            # entries on retracement before hos or after high of the session
+            strat_df = df[(df.retracement_level <= buy_in) |
+                          ((df.retracement_level > buy_in) & (df.after_conf_min_level <= buy_in))]
+
+            strat_df = strat_df[["after_conf_max_level", "after_conf_min_level", "session_close_level", "retracement_level", "expansion_level"]]
             #direct sl trades
-            sl_df = strat_df[(strat_df.retracement_level <= sl)]
-            # SL after high of day
-            sl2_df = strat_df[(strat_df.retracement_level > sl) &
-                              (strat_df.session_low_level <= sl) &
-                              (strat_df.expansion_level < tp)]
+            sl_df = strat_df[(strat_df.retracement_level <= sl) |
+                             ((strat_df.retracement_level > sl) &
+                             (strat_df.after_conf_min_level <= sl))
+                             ]
 
             # tp trades
             tp_df = strat_df[(strat_df.expansion_level >= tp) & (strat_df.retracement_level > sl)]
 
+            #delete sl from tp trades
+            tp_df = tp_df.drop(sl_df.index, axis='index', errors="ignore")
+
             # delete sl and tp trades from overall df
             part_df = strat_df.drop(sl_df.index, axis='index')
-            part_df = part_df.drop(sl2_df.index, axis='index')
             part_df = part_df.drop(tp_df.index, axis='index')
 
             #partial wins
             part_win_df = part_df[part_df.session_close_level >= buy_in]
             part_loss_df = part_df[part_df.session_close_level < buy_in]
 
-            #calc kpis
-            # win_rate = (part_win_count + tp_count) / trade_count
-            # target_tp = abs(buy_in - tp) / abs(buy_in - sl)
+
         else:
             # Filter dataframe
-            strat_df = df[(df.retracement_level >= buy_in)]
-            strat_df = strat_df[["session_high_level", "session_low_level", "session_close_level", "retracement_level",
+            # entries on retracement before hos or after low of the session
+            strat_df = df[(df.retracement_level >= buy_in) |
+                          ((df.retracement_level < buy_in) & (df.after_conf_max_level > buy_in))]
+            strat_df = strat_df[["after_conf_max_level", "after_conf_min_level", "session_close_level", "retracement_level",
                                  "expansion_level"]]
 
-            # direct sl trades
-            sl_df = strat_df[(strat_df.retracement_level >= sl)]
-            # SL after high of day
-            sl2_df = strat_df[(strat_df.retracement_level < sl) &
-                              (strat_df.session_high_level >= sl) &
-                              (strat_df.expansion_level > tp)]
-
+            # sl trades
+            sl_df = strat_df[(strat_df.retracement_level >= sl) |
+                             (strat_df.retracement_level < sl) &
+                             (strat_df.after_conf_max_level >= sl)
+                             ]
             # tp trades
             tp_df = strat_df[(strat_df.expansion_level <= tp) & (strat_df.retracement_level < sl)]
 
+            #delete sl from tp trades
+            tp_df = tp_df.drop(sl_df.index, axis='index', errors="ignore")
+
             # delete sl and tp trades from overall df
             part_df = strat_df.drop(sl_df.index, axis='index')
-            part_df = part_df.drop(sl2_df.index, axis='index')
             part_df = part_df.drop(tp_df.index, axis='index')
 
             # partial wins
@@ -554,7 +562,7 @@ with strategy_tester:
 
             # calc kpis
         trade_count = len(strat_df.index)
-        sl_count = len(sl_df.index) + len(sl2_df.index)
+        sl_count = len(sl_df.index)
         tp_count = len(tp_df.index)
         part_loss_count = len(part_loss_df.index)
         part_win_count = len(part_win_df.index)
@@ -591,7 +599,10 @@ with strategy_tester:
             st.metric("Target Risk Multiple", f"{target_tp:.2f}")
         with avg_rr:
 
-            real_par_rr = (np.array(part_df.session_close_level) - buy_in) / abs(buy_in - sl)
+            if dr_side == "Long":
+                real_par_rr = (np.array(part_df.session_close_level) - buy_in) / abs(buy_in - sl)
+            else:
+                real_par_rr = (np.array(buy_in - part_df.session_close_level)) / abs(buy_in - sl)
             avg_risk_reward = ((tp_count * target_tp) + (sl_count * -1) + sum(real_par_rr)) / trade_count
 
             st.metric("Avg. Realized Risk Multiple", f"{avg_risk_reward: .2f}")
@@ -599,12 +610,10 @@ with strategy_tester:
 
             #Equity Curve
             sl_df["R"] = -1
-            sl2_df["R"] = -1
             tp_df["R"] = target_tp
             part_df["R"] = real_par_rr
 
-            #eq_curve = pd.concat([sl_df[["R"]], sl2_df[["R"]],tp_df[["R"]], part_df[["R"]]])
-            eq_curve = pd.concat([sl_df, sl2_df, tp_df, part_df])
+            eq_curve = pd.concat([sl_df, tp_df, part_df])
             eq_curve = eq_curve.sort_index(ascending=True)
             eq_curve["Risk Reward"] = eq_curve.R.cumsum()
             st.metric("Realized Risk Reward", f"{eq_curve.R.sum(): .2f}")
