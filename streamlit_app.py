@@ -147,6 +147,7 @@ with st.sidebar:
                    "GC": "Gold Futures",
                    "EURUSD": "Euro / US- Dollar",
                    "GBPUSD": "British Pound / US- Dollar",
+                   "AUDJPY": "Australian Dollar / Japanese Yen",
                    "FDAX": "DAX Futures"
                    }
 
@@ -155,10 +156,23 @@ with st.sidebar:
         symbol_dict.keys()
     )
 
-    session_dict = {"New York (9:30 - 16:00 EST)": "dr", "London (3:00 - 8:30 EST)": "odr"}
-    session = st.radio("Choose your Session",
-                        ["New York (9:30 - 16:00 EST)", "London (3:00 - 8:30 EST)"])
-                    #    ["DR", "oDR"])
+    session_dict = {"New York (9:30 - 16:00 EST)": "dr",
+                    "London (3:00 - 8:30 EST)": "odr",
+                    "Tokyo (8:30 - 14:30 JST)": "adr"}
+
+    st.write(symbol)
+
+    if symbol == "AUDJPY":
+        session = st.radio("Choose your Session",
+                           ["New York (9:30 - 16:00 EST)",
+                            "London (3:00 - 8:30 EST)",
+                            "Tokyo (8:30 - 14:30 JST)"])
+    else:
+        session = st.radio("Choose your Session",
+                            ["New York (9:30 - 16:00 EST)",
+                             "London (3:00 - 8:30 EST)",
+                             ])
+
 
     file = os.path.join("dr_data", f"{symbol.lower()}_{session_dict.get(session)}.csv")
 
