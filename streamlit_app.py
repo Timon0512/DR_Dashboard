@@ -160,7 +160,6 @@ with st.sidebar:
                     "London (3:00 - 8:30 EST)": "odr",
                     "Tokyo (8:30 - 14:30 JST)": "adr"}
 
-    st.write(symbol)
 
     if symbol == "AUDJPY":
         session = st.radio("Choose your Session",
