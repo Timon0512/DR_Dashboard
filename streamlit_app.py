@@ -92,6 +92,7 @@ def create_plotly_plot(df, title, x_title, y1_name="Pct", y2_name="Overall likel
 
     return subfig
 
+
 def create_join_table(first_symbol, second_symbol):
 
     cols_to_use = ["date", "greenbox", "breakout_time", "dr_upday", "max_retracement_time", "max_expansion_time", "retracement_level", "expansion_level", "closing_level"]
@@ -160,7 +161,6 @@ with st.sidebar:
                     "London (3:00 - 8:30 EST)": "odr",
                     "Tokyo (8:30 - 14:30 JST)": "adr"}
 
-
     if symbol == "AUDJPY":
         session = st.radio("Choose your Session",
                            ["New York (9:30 - 16:00 EST)",
@@ -172,10 +172,11 @@ with st.sidebar:
                              "London (3:00 - 8:30 EST)",
                              ])
 
-
     file = os.path.join("dr_data", f"{symbol.lower()}_{session_dict.get(session)}.csv")
+    model_file = os.path.join("session_models", f"{symbol.lower()}_model_table.csv")
 
     df = load_data(file)
+    model_df = load_data(model_file)
 
     st.divider()
 
@@ -235,8 +236,8 @@ df = df[df.breakout_window.isin(confirmation_time)]
 data_points = len(df.index)
 inv_param = [False if dr_side == "Long" else True][0]
 
-general_tab, distribution_tab, strategy_tester, retracement_manager, strategy_rules, faq_tab, disclaimer, ml = \
-    st.tabs(["General Statistics", "Distribution", "Stategy Backtester", "Retracement Manager", "Strategy Rules", "FAQ", "Disclaimer", "Machine Learning"])
+general_tab, distribution_tab, strategy_tester, strategy_rules, faq_tab, disclaimer, ml , Test= \
+    st.tabs(["General Statistics", "Distribution", "Stategy Backtester", "Strategy Rules", "FAQ", "Disclaimer", "Machine Learning", "Test"])
 
 with general_tab:
 
@@ -284,7 +285,6 @@ with general_tab:
             st.metric("Long confirmation days", f"{0:.0%}")
 
 
-
     with col6:
 
         if dr_side == "Long":
@@ -302,14 +302,13 @@ with general_tab:
 
         else:
             st.empty()
+
     with col7:
-        count_days_with_retracement_idr = len(df[df['retrace_into_idr']])
-        idr_retracement = count_days_with_retracement_idr / data_points
-        st.metric("Retracement days into iRange", f"{idr_retracement:.1%}",
-                  help="% of days with retracement into the implied opening range (candle bodies) before the high/low of the day happens")
+        st.metric("Mean Range Size", round(df.dr_range.mean(), 4))
+
 
     with col8:
-        st.empty()
+        st.metric("Median Range Size", round(df.dr_range.median(), 4))
 
 with distribution_tab:
 
@@ -402,102 +401,6 @@ with distribution_tab:
 
         with tab_data:
             st.dataframe(df2)
-
-with retracement_manager:
-    ny_time = datetime.now(pytz.timezone('America/New_York'))
-    col_1, col_2 = st.columns(2)
-
-
-    col9, col10, col11 = st.columns(3)
-
-    if dr_side == "All":
-        st.error("Please select opening range confirmation side for useful results!")
-
-    with col9:
-        cur_rt_lvl = round(st.number_input("What is your current level of retracement?", value=0.5, step=0.1,
-                                            help="Deselects datapoints that show a less strong retracenent"), 2)
-        if dr_side == "Long":
-            df_sub = df[df.after_conf_min_level <= cur_rt_lvl]
-        else:
-            df_sub = df[df.after_conf_max_level >= cur_rt_lvl]
-
-    with col10:
-        st.empty()
-
-    with col11:
-        st.empty()
-
-
-    st.divider()
-
-    sub_data_points = len(df_sub.index)
-
-    col12, col13, col14 = st.columns(3)
-
-    with col12:
-
-        count_dr_true_sub = len(df_sub[df_sub['dr_true']].index)
-        dr_true_sub = count_dr_true_sub / sub_data_points
-        st.metric("Probability that opposite range holds", f"{dr_true_sub:.1%}",
-                  help="price does not close above/below opposite range")
-
-    with col13:
-
-        if dr_side == "Long":
-
-            breach_count = len(df_sub[df_sub['breached_dr_low']])
-            breach_pct = 1 - (breach_count / sub_data_points)
-            st.metric("Opening range low unbreached", f"{breach_pct:.1%}",
-                      help="% of days where price doesn´t wicks below DR low")
-
-        elif dr_side == "Short":
-            breach_count = len(df_sub[df_sub['breached_dr_high']])
-            breach_pct = 1 - (breach_count / sub_data_points)
-            st.metric("opening range high unbreached", f"{breach_pct:.1%}",
-                      help="% of days where price doesn´t wicks above opening range high")
-
-        else:
-            st.empty()
-
-
-    with col14:
-        count_close_outside_dr = len(df_sub[df_sub.close_outside_dr].index)
-        dr_winning_days_sub = count_close_outside_dr / sub_data_points
-        st.metric("Price closes outside opening range", f"{dr_winning_days_sub:.1%}",
-                      help="In direction of opening range confirmation")
-
-
-    # Plotting Area
-    col_5, col_6 = st.columns(2)
-
-
-    with col_5:
-
-        if dr_side == "Long":
-            df2_sub = create_plot_df(df_sub, "session_low_level")
-            fig = create_plotly_plot(df2_sub, "Distribution of Session lows (retracement)", "Session Low Level")
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            df2_sub = create_plot_df(df_sub, "session_high_level", inverse_percentile=inv_param)
-            fig = create_plotly_plot(df2_sub, "Distribution of Session highs (retracement)", "Session High Level")
-            st.plotly_chart(fig, use_container_width=True)
-
-    with col_6:
-
-        if dr_side == "Long":
-
-            df2_sub = create_plot_df(df_sub, "session_high_level", inverse_percentile=not inv_param)
-            fig = create_plotly_plot(df2_sub, "Distribution of Session highs (expansion)", "Session High Level")
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            df2_sub = create_plot_df(df_sub, "session_low_level", inverse_percentile=not inv_param)
-            fig = create_plotly_plot(df2_sub, "Distribution of Session lows (expansion)", "Session Low Level")
-            st.plotly_chart(fig, use_container_width=True)
-
-
-
-
-    st.write(f"Subset of :red[{len(df_sub.index)}] datapoints are used for this scenario.")
 
 with strategy_tester:
     if dr_side == "All":
@@ -652,7 +555,6 @@ with strategy_tester:
                "rather than a definitive prediction of actual trading performance. "
                )
 
-
 with ml:
     st.write("This section is still in the very early stages of testing and should never be used as a reference. It should rather be seen as a technical gimmick. ")
     st.divider()
@@ -753,9 +655,40 @@ with disclaimer:
         "By accessing this website, you acknowledge and agree to the terms of this disclaimer. The content on this homepage is subject to change without notice."
     )
 
-# with test:
-#
-#     st.empty()
+with Test:
+
+    model_df2 = model_df.groupby(["date", "ny_model", "ldn_model", "asia_model", "asia_outcome", "ldn_outcome"]).agg({"is_previous_day": "count"}).reset_index()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        asia_model = st.selectbox("Select Asia Model", np.unique(model_df2["asia_model"]), key="a_model")
+    with col2:
+        asia_result = st.selectbox("Asia Model Outcome", np.unique(model_df2["asia_outcome"]), key="a_result",)
+
+    col3, col4 = st.columns(2)
+
+    with col3:
+        london_model = st.selectbox("Select London Model", np.unique(model_df2["ldn_model"]), key="l_model")
+
+    with col4:
+        london_result = st.selectbox("London Model Outcome", np.unique(model_df2["ldn_outcome"]), key="l_result")
+
+    model_df2 = model_df2[(model_df2["asia_model"] == asia_model)
+            & (model_df2["ldn_model"] == london_model)
+            & (model_df2["asia_outcome"] == asia_result)
+            & (model_df2["ldn_outcome"] == london_result)
+            ]
+
+    model_df2 = model_df2.rename(columns={"is_previous_day": "pct"})
+    model_df2 = model_df2.groupby("ny_model").agg({"pct": lambda x: len(x)/len(model_df2)})
+
+
+    st.divider()
+    st.subheader("New York Model Distribution")
+    st.bar_chart(model_df2)
+    st.write(model_df2)
+
+
 
 st.divider()
 start_date = df.index[0].strftime("%Y-%m-%d")
