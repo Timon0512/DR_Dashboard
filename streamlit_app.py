@@ -173,10 +173,10 @@ with st.sidebar:
                              ])
 
     file = os.path.join("dr_data", f"{symbol.lower()}_{session_dict.get(session)}.csv")
-    model_file = os.path.join("session_models", f"{symbol.lower()}_model_table.csv")
+    # model_file = os.path.join("session_models", f"{symbol.lower()}_model_table.csv")
 
     df = load_data(file)
-    model_df = load_data(model_file)
+    # model_df = load_data(model_file)
 
     st.divider()
 
@@ -236,8 +236,8 @@ df = df[df.breakout_window.isin(confirmation_time)]
 data_points = len(df.index)
 inv_param = [False if dr_side == "Long" else True][0]
 
-general_tab, distribution_tab, strategy_tester, strategy_rules, faq_tab, disclaimer, ml , Test= \
-    st.tabs(["General Statistics", "Distribution", "Stategy Backtester", "Strategy Rules", "FAQ", "Disclaimer", "Machine Learning", "Test"])
+general_tab, distribution_tab, strategy_tester, strategy_rules, faq_tab, disclaimer, ml , = \
+    st.tabs(["General Statistics", "Distribution", "Stategy Backtester", "Strategy Rules", "FAQ", "Disclaimer", "Machine Learning", ])
 
 with general_tab:
 
@@ -655,38 +655,38 @@ with disclaimer:
         "By accessing this website, you acknowledge and agree to the terms of this disclaimer. The content on this homepage is subject to change without notice."
     )
 
-with Test:
-
-    model_df2 = model_df.groupby(["date", "ny_model", "ldn_model", "asia_model", "asia_outcome", "ldn_outcome"]).agg({"is_previous_day": "count"}).reset_index()
-
-    col1, col2 = st.columns(2)
-    with col1:
-        asia_model = st.selectbox("Select Asia Model", np.unique(model_df2["asia_model"]), key="a_model")
-    with col2:
-        asia_result = st.selectbox("Asia Model Outcome", np.unique(model_df2["asia_outcome"]), key="a_result",)
-
-    col3, col4 = st.columns(2)
-
-    with col3:
-        london_model = st.selectbox("Select London Model", np.unique(model_df2["ldn_model"]), key="l_model")
-
-    with col4:
-        london_result = st.selectbox("London Model Outcome", np.unique(model_df2["ldn_outcome"]), key="l_result")
-
-    model_df2 = model_df2[(model_df2["asia_model"] == asia_model)
-            & (model_df2["ldn_model"] == london_model)
-            & (model_df2["asia_outcome"] == asia_result)
-            & (model_df2["ldn_outcome"] == london_result)
-            ]
-
-    model_df2 = model_df2.rename(columns={"is_previous_day": "pct"})
-    model_df2 = model_df2.groupby("ny_model").agg({"pct": lambda x: len(x)/len(model_df2)})
-
-
-    st.divider()
-    st.subheader("New York Model Distribution")
-    st.bar_chart(model_df2)
-    st.write(model_df2)
+# with Test:
+#
+#     model_df2 = model_df.groupby(["date", "ny_model", "ldn_model", "asia_model", "asia_outcome", "ldn_outcome"]).agg({"is_previous_day": "count"}).reset_index()
+#
+#     col1, col2 = st.columns(2)
+#     with col1:
+#         asia_model = st.selectbox("Select Asia Model", np.unique(model_df2["asia_model"]), key="a_model")
+#     with col2:
+#         asia_result = st.selectbox("Asia Model Outcome", np.unique(model_df2["asia_outcome"]), key="a_result",)
+#
+#     col3, col4 = st.columns(2)
+#
+#     with col3:
+#         london_model = st.selectbox("Select London Model", np.unique(model_df2["ldn_model"]), key="l_model")
+#
+#     with col4:
+#         london_result = st.selectbox("London Model Outcome", np.unique(model_df2["ldn_outcome"]), key="l_result")
+#
+#     model_df2 = model_df2[(model_df2["asia_model"] == asia_model)
+#             & (model_df2["ldn_model"] == london_model)
+#             & (model_df2["asia_outcome"] == asia_result)
+#             & (model_df2["ldn_outcome"] == london_result)
+#             ]
+#
+#     model_df2 = model_df2.rename(columns={"is_previous_day": "pct"})
+#     model_df2 = model_df2.groupby("ny_model").agg({"pct": lambda x: len(x)/len(model_df2)})
+#
+#
+#     st.divider()
+#     st.subheader("New York Model Distribution")
+#     st.bar_chart(model_df2)
+#     st.write(model_df2)
 
 
 
