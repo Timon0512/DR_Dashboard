@@ -1,13 +1,10 @@
 import streamlit as st
 from datetime import datetime, time
-import pytz
 import os
 import pandas as pd
 import numpy as np
 import plotly.express as px
 from plotly.subplots import make_subplots
-from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import RandomForestClassifier
 import pickle
 
 
@@ -16,6 +13,11 @@ st.set_page_config(page_title="Opening Range Breakout Analytics", layout="wide")
 @st.cache_data
 def load_data(file_path):
     df = pd.read_csv(file_path, sep=";", index_col=0, parse_dates=True)
+    date_cols = ["up_confirmation", "down_confirmation", "breakout_time", "max_retracement_time", "max_expansion_time"]
+    df[date_cols] = df[date_cols].apply(pd.to_datetime, unit="us", utc=True)
+    df[date_cols] = df[date_cols].apply(lambda x: x.dt.tz_convert('America/New_York'))
+    df[date_cols] = df[date_cols].apply(lambda x: x.dt.time)
+
     return df
 
 
@@ -154,30 +156,22 @@ with st.sidebar:
 
     symbol = st.sidebar.selectbox(
         "Choose your Symbol?",
-        symbol_dict.keys()
-    )
+        symbol_dict.keys())
 
-    session_dict = {"New York (9:30 - 16:00 EST)": "dr",
-                    "London (3:00 - 8:30 EST)": "odr",
-                    "Tokyo (8:30 - 14:30 JST)": "adr"}
 
-    if symbol == "AUDJPY":
-        session = st.radio("Choose your Session",
-                           ["New York (9:30 - 16:00 EST)",
-                            "London (3:00 - 8:30 EST)",
-                            "Tokyo (8:30 - 14:30 JST)"])
-    else:
-        session = st.radio("Choose your Session",
-                            ["New York (9:30 - 16:00 EST)",
-                             "London (3:00 - 8:30 EST)",
-                             ])
+    session_dict = {"New York (9:30 - 16:00 EST)": "ny",
+                    "London (3:00 - 8:30 EST)": "ldn",
+                    "Tokyo (19:30 - 00:30 EST)": "asia"}
 
-    file = os.path.join("dr_data", f"{symbol.lower()}_{session_dict.get(session)}.csv")
-    # model_file = os.path.join("session_models", f"{symbol.lower()}_model_table.csv")
+    session = st.radio("Choose your Session",
+                        ["New York (9:30 - 16:00 EST)",
+                        "London (3:00 - 8:30 EST)",
+                        "Tokyo (19:30 - 00:30 EST)"])
 
+    orb_duration = st.sidebar.selectbox("Choose Opening Range Duration", [60, 30])
+
+    file = os.path.join("dr_data", f"{symbol.lower()}_{session_dict.get(session)}_{orb_duration}.csv")
     df = load_data(file)
-    # model_df = load_data(model_file)
-
     st.divider()
 
 
@@ -229,7 +223,7 @@ with col2:
     else:
         st.empty()
 
-time_windows = np.unique(df.breakout_window)
+time_windows = (df["breakout_window"].dropna().unique())
 confirmation_time = st.multiselect("Confirmation time of the day", time_windows, default=time_windows)
 df = df[df.breakout_window.isin(confirmation_time)]
 
@@ -313,23 +307,18 @@ with general_tab:
 with distribution_tab:
 
     col3, col4, col5, close_dis = st.columns(4)
-
     with col3:
+
         median_time = median_time_calcualtion(df["breakout_time"])
-        # median_time = statistics.median(df2["breakout_time"])
         st.metric("Median confirmation time:", value=str(median_time),
                   delta=f"Mode breakout time: {df.breakout_time.mode()[0]}")
         breakout = st.button("See Distribution", key="breakout")
-
-
     with col4:
         median_retracement = median_time_calcualtion(df["max_retracement_time"])
         st.metric("Median retracement before HoS/LoS:", value=str(median_retracement),
                   delta=f"Median retracement value: {df.retracement_level.median()}",
                   delta_color="inverse")
         retracement = st.button("See Distribution", key="retracement")
-
-
     with col5:
 
         median_expansion = median_time_calcualtion(df["max_expansion_time"])
@@ -338,11 +327,9 @@ with distribution_tab:
                   )
         expansion = st.button("See distribution", key="expansion_time")
 
-
     if breakout:
         st.write("**Distribution of opening range confirmation**")
         st.bar_chart(create_plot_df(df, "breakout_window"), y="pct")
-
     elif retracement:
 
         tab_chart, tab_data = st.tabs(["📈 Chart", "🗃 Data"])
@@ -365,13 +352,14 @@ with distribution_tab:
             st.caption(
                     "Level :red[0] is the low of the opening range and level :red[1] is the high of the opening range (wicks).")
             st.divider()
+            ret_df = df.groupby("max_retracement_time").agg({"max_retracement_value": "count"}).reset_index()
+            ret_df["max_retracement_time"] = ret_df["max_retracement_time"].astype(str)
             st.write("**Distribution of max retracement time before high/low of the session**")
-            st.bar_chart(df.groupby("max_retracement_time").agg({"max_retracement_value": "count"}), use_container_width=True)
+            st.bar_chart(ret_df,x="max_retracement_time", y="max_retracement_value", use_container_width=True)
 
 
         with tab_data:
             st.dataframe(df2)
-
     elif expansion:
 
         if dr_side == "Short":
@@ -395,7 +383,10 @@ with distribution_tab:
             st.divider()
 
             st.write("**Distribution of max expansion time**")
-            st.bar_chart(df.groupby("max_expansion_time").agg({"max_expansion_value": "count"}), use_container_width=True)
+            exp_df = df.groupby("max_expansion_time").agg({"max_expansion_value": "count"}).reset_index()
+            exp_df["max_expansion_time"] = exp_df["max_expansion_time"].astype(str)
+
+            st.bar_chart(exp_df, use_container_width=True, x="max_expansion_time", y="max_expansion_value")
 
             st.write(f"Median max expansion time is: {median_time_calcualtion(df.max_expansion_time)}")
 
