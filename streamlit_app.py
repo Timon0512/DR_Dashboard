@@ -512,7 +512,7 @@ with model:
         st.divider()
         st.write("**Model Distribution based on previous Sessions Model**")
         st.write("")
-        st.bar_chart(model_df, y="pct", x="model")
+        st.bar_chart(model_df, y="pct", x="model", color=bar_color)
 
         st.write("**Likelihood of up confirmation for each model**")
 
@@ -521,7 +521,7 @@ with model:
             st.write("")
             st.write("")
             st.write("")
-            st.bar_chart(model_df, y="pct_upday", x="model")
+            st.bar_chart(model_df, y="pct_upday", x="model", color=bar_color)
 
         else:
             # Schritt 1: Knoten und ihre Indizes
