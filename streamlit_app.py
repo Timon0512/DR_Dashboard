@@ -116,13 +116,6 @@ def create_join_table(first_symbol, second_symbol):
 
     df_join = df1.join(df2, lsuffix=f"_{first_symbol}", rsuffix=f"_{second_symbol}", how="left")
 
-    # df[f"breakout_time_{first_symbol}"] = pd.to_datetime(df[f"breakout_time_{first_symbol}"], format="%H:%M:%S")
-    # df[f"breakout_time_{second_symbol}"] = pd.to_datetime(df[f"breakout_time_{second_symbol}"], format="%H:%M:%S")
-
-    # df["breakout_dif"] = (df[f"breakout_time_{second_symbol}"] - df[f"breakout_time_{first_symbol}"]).dt.total_seconds()/60
-    # df["retracement_dif"] = df[f"retracement_level_es"] - df["retracement_level_nq"]
-    # df["expansion_dif"] = df["expansion_level_es"] - df["expansion_level_nq"]
-
     return df_join
 
 
@@ -217,11 +210,12 @@ st.write("Do you want to narrow down your data further?")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    orb_side = st.radio("Range confirmation side", ("All", "Long", "Short"))
+    orb_side = st.radio("Range breakout side", ("All", "Long", "Short"))
     if orb_side == "Long":
-        df = df[df.upday == True]
+        df = df.loc[df.upday]
+
     elif orb_side == "Short":
-        df = df[(df.upday == False) & (df["down_confirmation"].notna())]
+        df = df[(~df.upday) & (df["down_confirmation"].notna())]
     else:
         pass
 
@@ -230,7 +224,7 @@ with col2:
     if greenbox == "True":
         df = df[df.greenbox]
     elif greenbox == "False":
-        df = df[df.greenbox == False]
+        df = df[~df.greenbox]
     else:
         st.empty()
 
@@ -259,17 +253,17 @@ with col3:
         model_filter = [model_filter]
 
 
-
-time_windows = (df["breakout_window"].dropna().unique())
-confirmation_time = st.multiselect("Confirmation time of the day", time_windows, default=time_windows)
-df = df[(df.breakout_window.isin(confirmation_time)) &
+df["breakout_window"] = df["breakout_window"].fillna("No Breakout")
+time_windows = (df["breakout_window"].unique())
+breakout_time = st.multiselect("Breakout time of the day", time_windows, default=time_windows)
+df = df[(df.breakout_window.isin(breakout_time)) &
         (df.model.isin(model_filter))]
 
 data_points = len(df.index)
 inv_param = [False if orb_side == "Long" else True][0]
 
 general_tab, distribution_tab, model, strategy_tester, strategy_rules, faq_tab, disclaimer, ml, = \
-    st.tabs(["General Statistics", "Distribution", "Model Distribution", "Stategy Backtester", "Strategy Rules", "FAQ",
+    st.tabs(["General Statistics", "Distribution", "Model Section", "Stategy Backtester", "Strategy Rules", "FAQ",
              "Disclaimer", "Machine Learning", ])
 
 with general_tab:
@@ -278,7 +272,7 @@ with general_tab:
     with col1:
         count_range_confirmed = len(df[df['range_confirmed']])
         confirmed_orb = count_range_confirmed / data_points
-        st.metric("Range is confirmed", f"{confirmed_orb:.1%}")
+        st.metric("Range breakouts", f"{confirmed_orb:.1%}")
 
     with col2:
         count_range_holds = len(df[df['range_holds']])
@@ -297,7 +291,7 @@ with general_tab:
         count_orb_winning = len(df[df.close_outside_range])
         orb_winning_days = count_orb_winning / data_points
         st.metric("Price closes outside opening range", f"{orb_winning_days:.1%}",
-                  help="In direction of opening range confirmation")
+                  help="In direction of opening range breakout")
 
     col5, col6, col7, col8 = st.columns(4)
 
@@ -305,11 +299,11 @@ with general_tab:
         count_orb_long = len(df[df['upday']])
         orb_conf_long = count_orb_long / data_points
         if orb_side == "All":
-            st.metric("Long confirmation days", f"{orb_conf_long:.1%}")
+            st.metric("Long breakout days", f"{orb_conf_long:.1%}")
         elif orb_side == "Long":
-            st.metric("Long confirmation days", f"{1:.0%}")
+            st.metric("Long breakout days", f"{1:.0%}")
         else:
-            st.metric("Long confirmation days", f"{0:.0%}")
+            st.metric("Long breakout days", f"{0:.0%}")
 
     with col6:
 
@@ -340,7 +334,7 @@ with distribution_tab:
     with col3:
 
         median_time = median_time_calcualtion(df["breakout_time"])
-        st.metric("Median confirmation time:", value=str(median_time),
+        st.metric("Median breakout time:", value=str(median_time),
                   delta=f"Mode breakout time: {df.breakout_time.mode()[0]}")
         breakout = st.button("See Distribution", key="breakout")
     with col4:
@@ -366,7 +360,7 @@ with distribution_tab:
         range_distribution = st.button("See Distribution")
 
     if breakout:
-        st.write("**Distribution of opening range confirmation**")
+        st.write("**Distribution of opening range breakout**")
         st.bar_chart(create_plot_df(df, "breakout_window"), y="pct", color=bar_color)
     elif retracement:
 
@@ -467,6 +461,16 @@ with distribution_tab:
             "This Chart shows the distribution of the range size expressed by its multiplier compared to the previous session.")
 
 with model:
+
+    model_explain = st.expander("See explanation of the Models", expanded=False)
+    with model_explain:
+        os.path.join("data", )
+        st.subheader("Uptrend Models")
+        st.image(os.path.join("pictures", "uptrend.png"))
+        st.subheader("Downrend Models")
+        st.image(os.path.join("pictures", "downtrend.png"))
+        st.subheader("Other Models")
+        st.image(os.path.join("pictures", "others.png"))
     order = ["Weak Uptrend", "Medium Uptrend", "Strong Uptrend", "Expansion", "Contraction", "Weak Downtrend",
              "Medium Downtrend", "Strong Downtrend", ]
 
@@ -474,7 +478,7 @@ with model:
             (orb_side != "All") or (greenbox != "All"):
         st.error("This section is used to determine the probability of the current session model. "
                    "This means that this section is only useful before or during the opening range period. "
-                   "Therefore, please do not set a confirmation side, greenbox or model filter. "
+                   "Therefore, please do not set a breakout side, greenbox or model filter. "
                    "Otherwise, these filters will reduce the amount of data from which the models can be formed and may lead to incorrect results. ")
     else:
 
@@ -489,7 +493,7 @@ with model:
         with mds_col:
             prev_md = st.selectbox("Choose Previous Model", order)
         with md_true_col:
-            is_md_up = st.selectbox("Was Previous Model a Up Confirmation?", [True, False])
+            is_md_up = st.selectbox("Was Previous Model a Long breakout?", [True, False])
         with md_up_col:
             is_md_true = st.selectbox("Has previous Session ORB rule hold true?", [True, False])
 
@@ -514,7 +518,7 @@ with model:
         st.write("")
         st.bar_chart(model_df, y="pct", x="model", color=bar_color)
 
-        st.write("**Likelihood of up confirmation for each model**")
+        st.write("**Likelihood of up breakout for each model**")
 
         sankey_bool = st.toggle("Sankey Chart")
         if not sankey_bool:
@@ -591,7 +595,7 @@ with model:
         st.write(f"Model prediction is based on a sample size of {model_sample}")
 with strategy_tester:
     if orb_side == "All":
-        st.error("Please select a confirmation side! Long confirmation assumes long trade and vice versa.")
+        st.error("Please select a breakout side! Long breakout assumes long trade and vice versa.")
     else:
 
         col_buy_in, col_sl, col_tp = st.columns(3)
@@ -766,9 +770,9 @@ with ml:
         y_predicted = model.predict(pred_values)
         st.divider()
         if y_predicted[0] == 0:
-            st.subheader("The machine learning model predicts a :red[short] confirmation for this session!")
+            st.subheader("The machine learning model predicts a :red[short] breakout for this session!")
         else:
-            st.subheader("The machine learning model predicts a :red[long] confirmation for this session!")
+            st.subheader("The machine learning model predicts a :red[long] breakout for this session!")
 
 with strategy_rules:
     st.subheader("Understanding the Opening Range Strategy")
@@ -781,7 +785,7 @@ with strategy_rules:
         "Traders begin by defining the opening range, spanning the first hour of trading. This range is determined by identifying the high and low prices during this initial timeframe.")
     st.write("**2. Breakout Identifying:**")
     st.write(
-        "Once the opening range is established, traders waits for a 5 minute close above the high of the range for long trades or below the low of the range for short trades. These breakout levels are called \"confirmation\" as they serve as a directional bias for a possible position.")
+        "Once the opening range is established, traders waits for a 5 minute close above the high of the range for long trades or below the low of the range for short trades. These breakout levels are called \"breakout\" as they serve as a directional bias for a possible position.")
     st.write("**3. Entry Techniques**")
     st.write(
         "There are different entry techniques. Usually traders enter the market once the price breaks above the high of the opening range (for long trades) or below the low of the opening range (for short trades). "
@@ -809,9 +813,9 @@ with faq_tab:
     orb.write(
         "iRange stands for implied range and refers to the price range that the candle bodies covers within the first hour of trading after the stock exchange opens.")
 
-    orb_confirmation = st.expander("What is a range confirmation (Long/Short)")
-    orb_confirmation.write(
-        "A Range confirmation refers to the closing of a 5-minute candle above or below the opening range high/low. A close above the opening range high is a long confirmation and a close below the opening price range low level is a short confirmation. ")
+    orb_breakout = st.expander("What is a range breakout (Long/Short)")
+    orb_breakout.write(
+        "A Range breakout refers to the closing of a 5-minute candle above or below the opening range high/low. A close above the opening range high is a long breakout and a close below the opening price range low level is a short breakout. ")
 
     orb_rule = st.expander("What is the opening range rule?")
     orb_rule.write(
