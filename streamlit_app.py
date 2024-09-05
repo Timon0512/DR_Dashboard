@@ -266,6 +266,10 @@ general_tab, distribution_tab, model, strategy_tester, strategy_rules, faq_tab, 
     st.tabs(["General Statistics", "Distribution", "Model Section", "Stategy Backtester", "Strategy Rules", "FAQ",
              "Disclaimer", "Machine Learning", ])
 
+if len(df) == 0:
+    st.error("No data has been selected. Please change the filter settings .")
+    st.stop()
+
 with general_tab:
     col1, col2, col3, col4 = st.columns(4)
 
@@ -593,6 +597,7 @@ with model:
 
             st.plotly_chart(fig, use_container_width=True)
         st.write(f"Model prediction is based on a sample size of {model_sample}")
+
 with strategy_tester:
     if orb_side == "All":
         st.error("Please select a breakout side! Long breakout assumes long trade and vice versa.")
@@ -719,6 +724,7 @@ with strategy_tester:
 
             # Equity Curve
             sl_df["R"] = -1
+
             tp_df["R"] = target_tp
             part_df["R"] = real_par_rr
 
