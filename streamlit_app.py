@@ -11,7 +11,22 @@ import pickle
 st.set_page_config(page_title="Opening Range Breakout Analytics", layout="wide")
 
 bar_color = "#223459"
-line_color = "red"
+line_color = "#FF4B4B"
+
+if 'retracement_button' not in st.session_state:
+    st.session_state['retracement_button'] = False
+
+if 'expansion_button' not in st.session_state:
+    st.session_state['expansion_button'] = False
+
+if 'range_button' not in st.session_state:
+    st.session_state['range_button'] = False
+
+if 'breakout_button' not in st.session_state:
+    st.session_state['breakout_button'] = True
+
+if 'use_orb_body' not in st.session_state:
+    st.session_state['use_orb_body'] = False
 
 @st.cache_data
 def load_data(file_path):
@@ -252,12 +267,16 @@ with col3:
     else:
         model_filter = [model_filter]
 
+model_filter = model_filter + ["No Model"]
 
 df["breakout_window"] = df["breakout_window"].fillna("No Breakout")
+df["model"] = df["model"].fillna("No Model")
 time_windows = (df["breakout_window"].unique())
 breakout_time = st.multiselect("Breakout time of the day", time_windows, default=time_windows)
+
 df = df[(df.breakout_window.isin(breakout_time)) &
         (df.model.isin(model_filter))]
+
 
 data_points = len(df.index)
 inv_param = [False if orb_side == "Long" else True][0]
@@ -281,7 +300,7 @@ with general_tab:
     with col2:
         count_range_holds = len(df[df['range_holds']])
         range_holds = count_range_holds / data_points
-        st.metric("Opposite Range holds", f"{range_holds:.1%}",
+        st.metric("Opposite Range holds (body)", f"{range_holds:.1%}",
                   help="No candle close below/above the opposite side of the confirmed range.")
 
     with col3:
@@ -311,29 +330,37 @@ with general_tab:
 
     with col6:
 
-        if orb_side == "Long":
+        breach_count = len(df[(df.breached_range_high) & df.breached_range_low])
+        breach_pct = 1 - (breach_count / len(df))
 
-            breach_count = len(df[df['breached_range_low']])
-            breach_pct = 1 - (breach_count / data_points)
-            st.metric("Range low unbreached", f"{breach_pct:.1%}",
-                      help="% of days where price doesn´t wicks below Range low")
-
-        elif orb_side == "Short":
-            breach_count = len(df[df['breached_range_high']])
-            breach_pct = 1 - (breach_count / data_points)
-            st.metric("Range high unbreached", f"{breach_pct:.1%}",
-                      help="% of days where price doesn´t wicks above Range high")
-
-        else:
-            st.empty()
+        st.metric("Opposite Range holds (wick)", f"{breach_pct:.1%}",
+                      help="% of days where price doesn´t wicks through opposite range of the orb breakout")
 
     with col7:
-        st.metric("Mean Range Size", round(df.range_size.mean(), 4))
+        st.metric("Median Opening Range Size Multiplier",
+                  round(df.range_multiplier.median(), 1),
+                  help="Compares the size of the Opening Range with the opening range size of the previous session.")
 
     with col8:
-        st.metric("Median Range Size", round(df.range_size.median(), 4))
+        st.empty()
 
 with distribution_tab:
+    use_orb_body = st.toggle("Use candle bodys for OR calculation",
+                              help="Uses bodys to determine the opening range instead of wicks.")
+
+    #Retracement/Expansion DF
+    df_ret = df[["retracement_window", "max_expansion_time"]].groupby(["retracement_window"]).count()
+    df_ret["pct"] = df_ret["max_expansion_time"] / df_ret["max_expansion_time"].sum()
+    df_exp = df[["max_retracement_time", "expansion_window"]].groupby(["expansion_window"]).count()
+    df_exp["pct"] = df_exp["max_retracement_time"] / df_exp["max_retracement_time"].sum()
+
+    df_ret = df_ret.join(df_exp, lsuffix=" retracement", rsuffix=" expansion")
+
+    if use_orb_body:
+        st.session_state["use_orb_body"] = True
+    else:
+        st.session_state["use_orb_body"] = False
+
     range_dis, col3, col4, col5,  = st.columns(4)
     with col3:
 
@@ -341,19 +368,51 @@ with distribution_tab:
         st.metric("Median breakout time:", value=str(median_time),
                   delta=f"Mode breakout time: {df.breakout_time.mode()[0]}")
         breakout = st.button("See Distribution", key="breakout")
+
+        if breakout:
+            st.session_state['breakout_button'] = True
+            st.session_state['retracement_button'] = False
+            st.session_state["expansion_button"] = False
+            st.session_state['range_button'] = False
+
     with col4:
         median_retracement = median_time_calcualtion(df["max_retracement_time"])
+        if st.session_state["use_orb_body"]:
+            median_retracement_value = df.retracement_level_body.median()
+        else:
+            median_retracement_value = df.retracement_level.median()
+
         st.metric("Median retracement before HoS/LoS:", value=str(median_retracement),
-                  delta=f"Median retracement value: {df.retracement_level.median()}",
+                  delta=f"Median retracement value: {median_retracement_value}",
                   )
         retracement = st.button("See Distribution", key="retracement")
+
+        if retracement:
+            st.session_state['retracement_button'] = True
+            st.session_state["expansion_button"] = False
+            st.session_state['breakout_button'] = False
+            st.session_state['range_button'] = False
+
     with col5:
 
         median_expansion = median_time_calcualtion(df["max_expansion_time"])
+
+        if st.session_state["use_orb_body"]:
+            median_expansion_value = df.expansion_level_body.median()
+        else:
+            median_expansion_value = df.expansion_level.median()
+
         st.metric("Median time of max expansion:", value=str(median_expansion),
-                  delta=f"Median expansion value: {df.expansion_level.median()}",
+                  delta=f"Median expansion value: {median_expansion_value}",
                   )
-        expansion = st.button("See distribution", key="expansion_time")
+        expansion = st.button("See distribution", key="expansion")
+
+        if expansion:
+            st.session_state["expansion_button"] = True
+            st.session_state['retracement_button'] = False
+            st.session_state['breakout_button'] = False
+            st.session_state['range_button'] = False
+
     with range_dis:
 
         median_range = df["range_multiplier"].median()
@@ -361,20 +420,34 @@ with distribution_tab:
 
         st.metric("Median Range Expansion", value=median_range,
                   delta=f"Average Range expansion: {avg_range}")
-        range_distribution = st.button("See Distribution")
+        range_distribution = st.button("See Distribution", key="range_expansion")
 
-    if breakout:
+        if range_distribution:
+            st.session_state['range_button'] = True
+            st.session_state["expansion_button"] = False
+            st.session_state['retracement_button'] = False
+            st.session_state['breakout_button'] = False
+
+    if st.session_state['breakout_button']:
         st.write("**Distribution of opening range breakout**")
         st.bar_chart(create_plot_df(df, "breakout_window"), y="pct", color=bar_color)
-    elif retracement:
+    elif st.session_state['retracement_button']:
 
         tab_chart, tab_data = st.tabs(["📈 Chart", "🗃 Data"])
+
         if orb_side == "Short":
-            df2 = create_plot_df(df, "retracement_level", inverse_percentile=False, ascending=True)
+            if not st.session_state['use_orb_body']:
+                df2 = create_plot_df(df, "retracement_level", inverse_percentile=False, ascending=True)
+            else:
+                df2 = create_plot_df(df, "retracement_level_body", inverse_percentile=False, ascending=True)
         else:
-            df2 = create_plot_df(df, "retracement_level", inverse_percentile=True)
+            if not st.session_state["use_orb_body"]:
+                df2 = create_plot_df(df, "retracement_level", inverse_percentile=True)
+            else:
+                df2 = create_plot_df(df, "retracement_level_body", inverse_percentile=True)
 
         with tab_chart:
+
             if orb_side == "Short":
                 fig = create_plotly_plot(df2, "Distribution of max retracement before low of the session",
                                          "Retracement Level", reversed_x_axis=False)
@@ -396,7 +469,7 @@ with distribution_tab:
             ret_df = ret_df.set_index("max_retracement_time")
 
             fig2 = create_plotly_plot(df=ret_df,
-                                      title="**Distribution of max retracement time before high/low of the session**",
+                                      title="Distribution of max retracement time before high/low of the session",
                                       x_title="Max Retracement Time",
                                       y1_name="Retracement Count",
                                       y1="max_retracement_value",
@@ -405,12 +478,23 @@ with distribution_tab:
             st.plotly_chart(fig2, use_container_width=True)
         with tab_data:
             st.dataframe(df2)
-    elif expansion:
+
+        st.divider()
+        st.write("**Extention/Retracement Time Overtake**")
+        st.line_chart(df_ret[["pct retracement", "pct expansion"]], color=[bar_color, line_color])
+
+    elif st.session_state["expansion_button"]:
 
         if orb_side == "Short":
-            df2 = create_plot_df(df, "expansion_level", inverse_percentile=True, ascending=False)
+            if not st.session_state['use_orb_body']:
+                df2 = create_plot_df(df, "expansion_level", inverse_percentile=True, ascending=False)
+            else:
+                df2 = create_plot_df(df, "expansion_level_body", inverse_percentile=True, ascending=False)
         else:
-            df2 = create_plot_df(df, "expansion_level", inverse_percentile=False)
+            if not st.session_state['use_orb_body']:
+                df2 = create_plot_df(df, "expansion_level", inverse_percentile=False)
+            else:
+                df2 = create_plot_df(df, "expansion_level_body", inverse_percentile=False)
 
         tab_chart, tab_data = st.tabs(["📈 Chart", "🗃 Data"])
 
@@ -442,9 +526,16 @@ with distribution_tab:
 
             st.plotly_chart(fig3, use_container_width=True)
             st.write(f"Median max expansion time is: {median_time_calcualtion(df.max_expansion_time)}")
+
+            st.divider()
+            st.write("**Extention/Retracement Time Overtake**")
+
+            st.line_chart(df_ret[["pct retracement", "pct expansion"]], color=[bar_color, line_color])
+
+
         with tab_data:
             st.dataframe(df2)
-    elif range_distribution:
+    elif st.session_state['range_button']:
 
         range_group = df.groupby("range_multiplier").agg({"range_size": "count"})
         range_group = range_group.rename(columns={"range_size": "count"})
@@ -478,7 +569,7 @@ with model:
     order = ["Weak Uptrend", "Medium Uptrend", "Strong Uptrend", "Expansion", "Contraction", "Weak Downtrend",
              "Medium Downtrend", "Strong Downtrend", ]
 
-    if (len(model_filter) is not len(order)) or \
+    if (len(model_filter)-1 is not len(order)) or \
             (orb_side != "All") or (greenbox != "All"):
         st.error("This section is used to determine the probability of the current session model. "
                    "This means that this section is only useful before or during the opening range period. "
@@ -866,41 +957,11 @@ with disclaimer:
         "By accessing this website, you acknowledge and agree to the terms of this disclaimer. The content on this homepage is subject to change without notice."
     )
 
-# with Test:
-#
-#     model_df2 = model_df.groupby(["date", "ny_model", "ldn_model", "asia_model", "asia_outcome", "ldn_outcome"]).agg({"is_previous_day": "count"}).reset_index()
-#
-#     col1, col2 = st.columns(2)
-#     with col1:
-#         asia_model = st.selectbox("Select Asia Model", np.unique(model_df2["asia_model"]), key="a_model")
-#     with col2:
-#         asia_result = st.selectbox("Asia Model Outcome", np.unique(model_df2["asia_outcome"]), key="a_result",)
-#
-#     col3, col4 = st.columns(2)
-#
-#     with col3:
-#         london_model = st.selectbox("Select London Model", np.unique(model_df2["ldn_model"]), key="l_model")
-#
-#     with col4:
-#         london_result = st.selectbox("London Model Outcome", np.unique(model_df2["ldn_outcome"]), key="l_result")
-#
-#     model_df2 = model_df2[(model_df2["asia_model"] == asia_model)
-#             & (model_df2["ldn_model"] == london_model)
-#             & (model_df2["asia_outcome"] == asia_result)
-#             & (model_df2["ldn_outcome"] == london_result)
-#             ]
-#
-#     model_df2 = model_df2.rename(columns={"is_previous_day": "pct"})
-#     model_df2 = model_df2.groupby("ny_model").agg({"pct": lambda x: len(x)/len(model_df2)})
-#
-#
-#     st.divider()
-#     st.subheader("New York Model Distribution")
-#     st.bar_chart(model_df2)
-#     st.write(model_df2)
 
 
 st.divider()
 start_date = df.index[0].strftime("%Y-%m-%d")
 end_date = df.index[-1].strftime("%Y-%m-%d")
 st.write(f"Statistics based on :red[{len(df)}] data points from :red[{start_date}] to :red[{end_date}]")
+
+

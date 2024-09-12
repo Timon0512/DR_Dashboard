@@ -227,10 +227,6 @@ class OpeningRange:
             # Remove days where ORB high == ORB low
             orb_df = orb_df.filter(pl.col("range_high") != pl.col("range_low"))
 
-            # Seems like statement is not needed
-            # orb_df = orb_df.filter(pl.col("session_high").is_not_null())
-
-            #self.sessions[session]["orb_table"] = orb_df
 
             ##########################################################
             ### ORB CONFIRMATION CALCULATION
@@ -239,38 +235,40 @@ class OpeningRange:
             df = df.join(orb_df[["date", "range_high", "range_low"]], left_on="date", right_on="date")
 
             df = df.with_columns([
-                (pl.col("close") > pl.col("range_high")).alias("long_confirmation"),
-                (pl.col("close") < pl.col("range_low")).alias("short_confirmation"),
+                (pl.col("close") > pl.col("range_high")).alias("long_breakout"),
+                (pl.col("close") < pl.col("range_low")).alias("short_breakout"),
             ])
-
+            #df.write_csv("test.csv", separator=";")
             long_df = df.filter(
-                (pl.col("long_confirmation")) &
+                (pl.col("long_breakout")) &
                 (pl.col("session"))
             ).group_by(["date"]).agg([
                 pl.col("time").first().alias("up_confirmation"),
             ])
 
             short_df = df.filter(
-                (pl.col("short_confirmation")) &
+                (pl.col("short_breakout")) &
                 (pl.col("session"))
             ).group_by(["date"]).agg([
                 pl.col("time").first().alias("down_confirmation"),
             ])
+            # short_df.write_csv("short.csv", separator=";")
+            # long_df.write_csv("long.csv", separator=";")
 
             orb_df = orb_df.join(long_df, left_on="date", right_on="date", how="left")
             orb_df = orb_df.join(short_df, left_on="date", right_on="date", how="left")
-
+            orb_df.write_csv("orb2.csv", separator=";")
             orb_df = orb_df.with_columns(
                 pl.min_horizontal(["up_confirmation", "down_confirmation"]).alias("breakout_time")
             )
 
 
             orb_df = orb_df.with_columns(
-                (pl.col("breakout_time") - (pl.col("breakout_time").dt.minute() % 30) * pl.duration(minutes=1))
+                (pl.col("breakout_time") - (pl.col("breakout_time").dt.minute() % 15) * pl.duration(minutes=1))
                     .dt.strftime("%H:%M")
                     .alias("breakout_window_start"),
-                (pl.col("breakout_time") - (pl.col("breakout_time").dt.minute() % 30) * pl.duration(
-                    minutes=1) + pl.duration(minutes=30))
+                (pl.col("breakout_time") - (pl.col("breakout_time").dt.minute() % 15) * pl.duration(
+                    minutes=1) + pl.duration(minutes=15))
                     .dt.strftime("%H:%M")
                     .alias("breakout_window_end")
             )
@@ -300,7 +298,8 @@ class OpeningRange:
                 ).alias("upday"))
             # ORB True
             orb_df = orb_df.with_columns(
-                (pl.col("up_confirmation").is_null() | pl.col("down_confirmation").is_null()).alias("range_holds")
+                (pl.col("up_confirmation").is_null() | pl.col("down_confirmation").is_null()).alias("range_holds"),
+
             )
             # Close OUTSIDE ORB
             orb_df = orb_df.with_columns(
@@ -494,19 +493,19 @@ class OpeningRange:
             )
 
             orb_df = orb_df.with_columns(
-                (pl.col("max_expansion_time") - (pl.col("max_expansion_time").dt.minute() % 30) * pl.duration(minutes=1))
+                (pl.col("max_expansion_time") - (pl.col("max_expansion_time").dt.minute() % 15) * pl.duration(minutes=1))
                     .dt.strftime("%H:%M")
                     .alias("expansion_window_start"),
-                (pl.col("max_expansion_time") - (pl.col("max_expansion_time").dt.minute() % 30) * pl.duration(
-                    minutes=1) + pl.duration(minutes=30))
+                (pl.col("max_expansion_time") - (pl.col("max_expansion_time").dt.minute() % 15) * pl.duration(
+                    minutes=1) + pl.duration(minutes=15))
                     .dt.strftime("%H:%M")
                     .alias("expansion_window_end"),
-                (pl.col("max_retracement_time") - (pl.col("max_retracement_time").dt.minute() % 30) * pl.duration(
+                (pl.col("max_retracement_time") - (pl.col("max_retracement_time").dt.minute() % 15) * pl.duration(
                     minutes=1))
                     .dt.strftime("%H:%M")
                     .alias("retracement_window_start"),
-                (pl.col("max_retracement_time") - (pl.col("max_retracement_time").dt.minute() % 30) * pl.duration(
-                    minutes=1) + pl.duration(minutes=30))
+                (pl.col("max_retracement_time") - (pl.col("max_retracement_time").dt.minute() % 15) * pl.duration(
+                    minutes=1) + pl.duration(minutes=15))
                     .dt.strftime("%H:%M")
                     .alias("retracement_window_end"),
 
@@ -569,6 +568,18 @@ class OpeningRange:
                             .ceil() * 0.1).round(1))
                     .alias("expansion_level"),
 
+                # Expansion_level_body Calculation
+                pl.when(pl.col("upday"))
+                    .then(
+                    (((pl.col("max_expansion_value") - pl.col("range_low_body")) /
+                      (pl.col("range_high_body") - pl.col("range_low_body")) / 0.1)
+                     .floor() * 0.1).round(1))
+                    .otherwise(
+                    (((pl.col("max_expansion_value") - pl.col("range_low_body")) /
+                      (pl.col("range_high_body") - pl.col("range_low_body")) / 0.1)
+                     .ceil() * 0.1).round(1))
+                    .alias("expansion_level_body"),
+
                 # Retracement_level Calculation
                 pl.when(pl.col("upday"))
                     .then(
@@ -580,6 +591,18 @@ class OpeningRange:
                         (pl.col("range_high") - pl.col("range_low"))/0.1)
                             .floor()*0.1).round(1))
                     .alias("retracement_level"),
+
+                # Retracement_level Calculation
+                pl.when(pl.col("upday"))
+                    .then(
+                    (((pl.col("max_retracement_value") - pl.col("range_low_body")) /
+                      (pl.col("range_high_body") - pl.col("range_low_body")) / 0.1)
+                     .ceil() * 0.1).round(1))
+                    .otherwise(
+                    (((pl.col("max_retracement_value") - pl.col("range_low_body")) /
+                      (pl.col("range_high_body") - pl.col("range_low_body")) / 0.1)
+                     .floor() * 0.1).round(1))
+                    .alias("retracement_level_body"),
 
                 # After con min, max level calc
                 pl.when(pl.col("upday"))
@@ -746,10 +769,15 @@ class OpeningRange:
 #Calculate ALL Symbols
 for symbol in symbols:
    start = t.time()
-   ORB = OpeningRange(symbol, orb_duration=60)
+   ORB = OpeningRange(symbol, orb_duration=30)
    ORB.export_all_orb_tables(unix=True)
    print(f"{symbol} took: {round(t.time() - start, 2)} seconds")
 
 
+#Calculate Single Symbols
 # ORB = OpeningRange("es")
 # ORB.export_all_orb_tables(unix=True, file_format="csv")
+
+
+# ORB = OpeningRange("es")
+# ORB.export_dataset(time_definition="unix")
