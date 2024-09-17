@@ -355,6 +355,7 @@ with distribution_tab:
     df_exp["pct"] = df_exp["max_retracement_time"] / df_exp["max_retracement_time"].sum()
 
     df_ret = df_ret.join(df_exp, lsuffix=" retracement", rsuffix=" expansion")
+    df_ret = df_ret.fillna(0)
 
     if use_orb_body:
         st.session_state["use_orb_body"] = True
@@ -480,7 +481,15 @@ with distribution_tab:
             st.dataframe(df2)
 
         st.divider()
-        st.write("**Extention/Retracement Time Overtake**")
+
+        overtake_percentile = st.toggle("Show Percentile", value=True)
+        st.write("**Retracement/Extention Time Overtake**")
+
+        if overtake_percentile:
+            #### Optional ? Overtake approach?
+            df_ret["pct retracement"] = 1 - (df_ret["pct retracement"].cumsum())
+            df_ret["pct expansion"] = df_ret["pct expansion"].cumsum()
+
         st.line_chart(df_ret[["pct retracement", "pct expansion"]], color=[bar_color, line_color])
 
     elif st.session_state["expansion_button"]:
@@ -957,11 +966,14 @@ with disclaimer:
         "By accessing this website, you acknowledge and agree to the terms of this disclaimer. The content on this homepage is subject to change without notice."
     )
 
-
-
 st.divider()
 start_date = df.index[0].strftime("%Y-%m-%d")
 end_date = df.index[-1].strftime("%Y-%m-%d")
 st.write(f"Statistics based on :red[{len(df)}] data points from :red[{start_date}] to :red[{end_date}]")
+
+if len(df) < 100:
+    st.error("The size of the selected samle is very small. "
+             "The informative value may not be very significant. "
+             "If possible, you should change the filter setting so that you select a larger amount of data.")
 
 
