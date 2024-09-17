@@ -31,7 +31,8 @@ if 'use_orb_body' not in st.session_state:
 @st.cache_data
 def load_data(file_path):
     df = pd.read_csv(file_path, sep=";", index_col=0, parse_dates=True)
-    date_cols = ["up_confirmation", "down_confirmation", "breakout_time", "max_retracement_time", "max_expansion_time"]
+    #date_cols = ["up_confirmation", "down_confirmation", "breakout_time", "max_retracement_time", "max_expansion_time"]
+    date_cols = ["breakout_time", "max_retracement_time", "max_expansion_time"]
     df[date_cols] = df[date_cols].apply(pd.to_datetime, unit="us", utc=True)
     df[date_cols] = df[date_cols].apply(lambda x: x.dt.tz_convert('America/New_York'))
     df[date_cols] = df[date_cols].apply(lambda x: x.dt.time)
@@ -104,6 +105,7 @@ def create_plotly_plot(df, title, x_title, y1_name="Pct", y2_name="Overall likel
     subfig.layout.yaxis2.title = y2_name
     subfig.layout.title = title
     subfig.layout.yaxis2.showgrid = False
+    subfig.layout.yaxis2.range = [0, 1]
 
     if reversed_x_axis:
         subfig.update_layout(
@@ -230,7 +232,7 @@ with col1:
         df = df.loc[df.upday]
 
     elif orb_side == "Short":
-        df = df[(~df.upday) & (df["down_confirmation"].notna())]
+        df = df[(~df.upday) & (df["breakout_time"].notna())]
     else:
         pass
 
@@ -461,27 +463,41 @@ with distribution_tab:
                 "The :red[red] line is the cumulative sum of the individual probabilities. It shows how many retracements/expansions have already ended at the corresponding level in the past.")
             st.caption(
                 "Level :red[0] is the low of the opening range and level :red[1] is the high of the opening range (wicks).")
+
             st.divider()
+            use_minutes = st.toggle("Use minutes",
+                                    help="Shows the max retracement in minutes after breakout "
+                                         "instead of an absolute time value",
+                                    value=False,
+                                    key="minute")
+            if use_minutes:
+                ret_df = df.groupby("retracement_in_minutes").agg({"max_retracement_time": "count"}).reset_index()
+                ret_df = ret_df.rename(columns={"max_retracement_time": "count"})
+                ret_df["percentile"] = ret_df["count"].cumsum() / ret_df["count"].sum()
+                ret_df = ret_df.set_index("retracement_in_minutes")
+                x_title = "Max Retracement in minutes after breakout"
+            else:
+                ret_df = df.groupby("retracement_window").agg({"retracement_in_minutes": "count"}).reset_index()
+                ret_df = ret_df.rename(columns={"retracement_in_minutes": "count"})
+                #ret_df["retracement_window"] = ret_df["retracement_window"].astype(str)
 
-            ret_df = df.groupby("max_retracement_time").agg({"max_retracement_value": "count"}).reset_index()
-            ret_df["max_retracement_time"] = ret_df["max_retracement_time"].astype(str)
-
-            ret_df["percentile"] = ret_df["max_retracement_value"].cumsum() / ret_df["max_retracement_value"].sum()
-            ret_df = ret_df.set_index("max_retracement_time")
+                ret_df["percentile"] = ret_df["count"].cumsum() / ret_df["count"].sum()
+                ret_df = ret_df.set_index("retracement_window")
+                x_title = "Max Retracement Time"
 
             fig2 = create_plotly_plot(df=ret_df,
                                       title="Distribution of max retracement time before high/low of the session",
-                                      x_title="Max Retracement Time",
+                                      x_title=x_title,
                                       y1_name="Retracement Count",
-                                      y1="max_retracement_value",
+                                      y1="count",
                                       y2="percentile",
                                       )
+
             st.plotly_chart(fig2, use_container_width=True)
         with tab_data:
             st.dataframe(df2)
 
         st.divider()
-
         overtake_percentile = st.toggle("Show Percentile", value=True)
         st.write("**Retracement/Extention Time Overtake**")
 
@@ -520,16 +536,34 @@ with distribution_tab:
                 "Level :red[0] is the low of the opening range and level :red[1] is the high of the opening range (wicks).")
             st.divider()
 
-            exp_df = df.groupby("max_expansion_time").agg({"max_expansion_value": "count"}).reset_index()
-            exp_df["max_expansion_time"] = exp_df["max_expansion_time"].astype(str)
-            exp_df = exp_df.set_index("max_expansion_time")
-            exp_df["percentile"] = exp_df["max_expansion_value"].cumsum() / exp_df["max_expansion_value"].sum()
+            use_minutes2 = st.toggle("Use minutes",
+                                    help="Shows the max retracement in minutes after breakout "
+                                         "instead of an absolute time value",
+                                    value=False,
+                                    key="minute2")
+
+            if st.session_state["minute2"]:
+                exp_df = df.groupby("expansion_in_minutes").agg({"max_expansion_time": "count"}).reset_index()
+                exp_df = exp_df.rename(columns={"max_expansion_time": "count"})
+                exp_df = exp_df.set_index("expansion_in_minutes")
+                x_title = "Max Expansion Time"
+
+            else:
+
+                exp_df = df.groupby("max_expansion_time").agg({"expansion_in_minutes": "count"}).reset_index()
+                exp_df = exp_df.rename(columns={"expansion_in_minutes": "count"})
+                exp_df["max_expansion_time"] = exp_df["max_expansion_time"].astype(str)
+                exp_df = exp_df.set_index("max_expansion_time")
+                x_title = "Max Expansion Time"
+
+            exp_df["percentile"] = exp_df["count"].cumsum() / exp_df["count"].sum()
+
 
             fig3 = create_plotly_plot(df=exp_df,
                                       title="Distribution of max expansion time before high/low of the session",
-                                      x_title="Max Expansion Time",
+                                      x_title=x_title,
                                       y1_name="Expansion Count",
-                                      y1="max_expansion_value",
+                                      y1="count",
                                       y2="percentile",
                                       )
 
@@ -546,8 +580,8 @@ with distribution_tab:
             st.dataframe(df2)
     elif st.session_state['range_button']:
 
-        range_group = df.groupby("range_multiplier").agg({"range_size": "count"})
-        range_group = range_group.rename(columns={"range_size": "count"})
+        range_group = df.groupby("range_multiplier").agg({"range_holds": "count"})
+        range_group = range_group.rename(columns={"range_holds": "count"})
         range_group["pct"] = range_group["count"] / range_group["count"].sum()
         range_group["percentile"] = range_group["pct"].cumsum()
         range_group = range_group[range_group.index <=5]
@@ -977,3 +1011,4 @@ if len(df) < 100:
              "If possible, you should change the filter setting so that you select a larger amount of data.")
 
 
+#st.write(st.session_state)
