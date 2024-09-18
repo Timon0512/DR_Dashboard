@@ -507,7 +507,6 @@ with distribution_tab:
             df_ret["pct expansion"] = df_ret["pct expansion"].cumsum()
 
         st.line_chart(df_ret[["pct retracement", "pct expansion"]], color=[bar_color, line_color])
-
     elif st.session_state["expansion_button"]:
 
         if orb_side == "Short":
@@ -547,17 +546,15 @@ with distribution_tab:
                 exp_df = exp_df.rename(columns={"max_expansion_time": "count"})
                 exp_df = exp_df.set_index("expansion_in_minutes")
                 x_title = "Max Expansion Time"
-
             else:
 
-                exp_df = df.groupby("max_expansion_time").agg({"expansion_in_minutes": "count"}).reset_index()
+                exp_df = df.groupby("expansion_window").agg({"expansion_in_minutes": "count"}).reset_index()
                 exp_df = exp_df.rename(columns={"expansion_in_minutes": "count"})
-                exp_df["max_expansion_time"] = exp_df["max_expansion_time"].astype(str)
-                exp_df = exp_df.set_index("max_expansion_time")
+                # exp_df["max_expansion_time"] = exp_df["max_expansion_time"].astype(str)
+                exp_df = exp_df.set_index("expansion_window")
                 x_title = "Max Expansion Time"
 
             exp_df["percentile"] = exp_df["count"].cumsum() / exp_df["count"].sum()
-
 
             fig3 = create_plotly_plot(df=exp_df,
                                       title="Distribution of max expansion time before high/low of the session",
@@ -574,8 +571,6 @@ with distribution_tab:
             st.write("**Extention/Retracement Time Overtake**")
 
             st.line_chart(df_ret[["pct retracement", "pct expansion"]], color=[bar_color, line_color])
-
-
         with tab_data:
             st.dataframe(df2)
     elif st.session_state['range_button']:
@@ -1006,7 +1001,7 @@ end_date = df.index[-1].strftime("%Y-%m-%d")
 st.write(f"Statistics based on :red[{len(df)}] data points from :red[{start_date}] to :red[{end_date}]")
 
 if len(df) < 100:
-    st.error("The size of the selected samle is very small. "
+    st.error("The selected sample size is very small. "
              "The informative value may not be very significant. "
              "If possible, you should change the filter setting so that you select a larger amount of data.")
 
