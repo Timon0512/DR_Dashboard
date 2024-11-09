@@ -160,6 +160,7 @@ with st.sidebar:
                    "YM": "Dow Jones Futures",
                    "CL": "Light Crude Oil Futures",
                    "GC": "Gold Futures",
+                   "BTC": "Bitcoin Futures",
                    "EURUSD": "Euro / US- Dollar",
                    "GBPUSD": "British Pound / US- Dollar",
                    "AUDJPY": "Australian Dollar / Japanese Yen",
@@ -663,26 +664,31 @@ with model:
         else:
             # Schritt 1: Knoten und ihre Indizes
 
-            df_sankey = df[["model_prev", "model"]].dropna()
-            df_sankey['model'] = df_sankey['model'] + "_target"
-            all_labels = list(pd.concat([df_sankey['model_prev'], df_sankey['model']]).unique())  # order
-            label_indices = {label: idx for idx, label in enumerate(all_labels)}
+            df_sankey = df[["model_prev", "model", "upday"]].dropna()
+            df_sankey['model_prev'] = df_sankey['model_prev'] + "_prev_session"
+            #df_sankey['model'] = df_sankey['model'] +
 
+            all_labels = list(pd.concat([df_sankey['model_prev'], df_sankey['model'], df_sankey['upday']]).unique())  # order
+            label_indices = {label: idx for idx, label in enumerate(all_labels)}
+            st.write(label_indices)
             # st.write(all_labels)
             # st.write(label_indices)
 
             # Schritt 2: Links erstellen (von source nach target)
+
             df_sankey['source'] = df_sankey['model_prev'].map(label_indices)
             df_sankey['target'] = df_sankey['model'].map(label_indices)
-            df_sankey["model2"] = df_sankey['model'].replace("_target", "", regex=True)
+            df_sankey['target2'] = df_sankey['upday'].map(label_indices)
+            df_sankey["prev_model2"] = df_sankey['model_prev'].replace("_prev_session", "", regex=True)
 
-            df_sankey = df_sankey[(df_sankey['model2'].isin(scenario_sel)) &
-                                  (df_sankey['model_prev'] == prev_md)]
+
+            df_sankey = df_sankey[(df_sankey['model'].isin(scenario_sel)) &
+                                  (df_sankey['prev_model2'] == prev_md)]
 
             # Schritt 3: Häufigkeiten der Verbindungen berechnen
-            link_data = df_sankey.groupby(['source', 'target']).size().reset_index(name='value')
-            # link_data["pct"] = link_data["value"] / link_data["value"].sum()
-
+            link_data = df_sankey.groupby(['source', 'target', 'target2']).agg(
+                value=('upday', 'size'),  # Anzahl der Zeilen in jeder Gruppe
+            ).reset_index()
 
             color_dict = {
                 "Weak Uptrend": "#70AD47",
@@ -701,11 +707,16 @@ with model:
                 "Weak Downtrend_target": "#FCE4D6",
                 "Medium Downtrend_target": "#F8CBAD",
                 "Strong Downtrend_target": "#C65911",
+                True: "#E2EFDA",
+                False: "#C65911",
 
             }
 
             node_colors = [color_dict.get(label, "grey") for label in all_labels]
+
             link_colors = [node_colors[target] for target in link_data['target']]
+
+            st.write(link_colors)
 
             # Schritt 4: Sankey-Diagramm erstellen
             fig = go.Figure(go.Sankey(
@@ -717,10 +728,10 @@ with model:
                     color=node_colors
                 ),
                 link=dict(
-                    source=link_data['source'],
-                    target=link_data['target'],
-                    value=link_data['value'],
-                    color=link_colors
+                    source=link_data['source'].to_list() + link_data["target"].to_list(),
+                    target=link_data["target"].to_list() + link_data["target2"].to_list(),
+                    value=link_data['value'].to_list() + link_data['value'].to_list(),
+                    color=color_dict
                 )
             ))
 
