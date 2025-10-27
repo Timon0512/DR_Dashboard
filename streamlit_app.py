@@ -65,7 +65,10 @@ def median_time_calcualtion(time_array):
     valid_times = [time_obj for time_obj in parsed_times if not pd.isna(time_obj)]
 
     # Konvertieren zu Sekunden
-    seconds_list = [time_to_seconds(time_obj) for time_obj in valid_times]
+    seconds_list = [time_to_seconds(time_obj) for time_obj in valid_times if time_obj is not None]
+
+    if not seconds_list:
+        return None
 
     # Median berechnen
     median_seconds = sorted(seconds_list)[len(seconds_list) // 2]
@@ -369,8 +372,15 @@ with distribution_tab:
     with col3:
 
         median_time = median_time_calcualtion(df["breakout_time"])
-        st.metric("Median breakout time:", value=str(median_time),
-                  delta=f"Mode breakout time: {df.breakout_time.mode()[0]}")
+        breakout_mode_series = df.breakout_time.dropna()
+        breakout_mode_values = breakout_mode_series.mode()
+        breakout_mode = breakout_mode_values[0] if not breakout_mode_values.empty else None
+        breakout_value = str(median_time) if median_time is not None else "No breakout time data"
+        breakout_delta = (f"Mode breakout time: {breakout_mode}" if breakout_mode is not None
+                          else "Mode breakout time: N/A")
+
+        st.metric("Median breakout time:", value=breakout_value,
+                  delta=breakout_delta)
         breakout = st.button("See Distribution", key="breakout")
 
         if breakout:
@@ -386,8 +396,14 @@ with distribution_tab:
         else:
             median_retracement_value = df.retracement_level.median()
 
-        st.metric("Median retracement before HoS/LoS:", value=str(median_retracement),
-                  delta=f"Median retracement value: {median_retracement_value}",
+        retracement_value = (str(median_retracement)
+                             if median_retracement is not None else "No retracement time data")
+        retracement_delta = (f"Median retracement value: {median_retracement_value}"
+                             if not pd.isna(median_retracement_value)
+                             else "Median retracement value: N/A")
+
+        st.metric("Median retracement before HoS/LoS:", value=retracement_value,
+                  delta=retracement_delta,
                   )
         retracement = st.button("See Distribution", key="retracement")
 
@@ -406,8 +422,14 @@ with distribution_tab:
         else:
             median_expansion_value = df.expansion_level.median()
 
-        st.metric("Median time of max expansion:", value=str(median_expansion),
-                  delta=f"Median expansion value: {median_expansion_value}",
+        expansion_value = (str(median_expansion)
+                           if median_expansion is not None else "No expansion time data")
+        expansion_delta = (f"Median expansion value: {median_expansion_value}"
+                           if not pd.isna(median_expansion_value)
+                           else "Median expansion value: N/A")
+
+        st.metric("Median time of max expansion:", value=expansion_value,
+                  delta=expansion_delta,
                   )
         expansion = st.button("See distribution", key="expansion")
 
